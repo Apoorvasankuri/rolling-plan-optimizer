@@ -26,10 +26,10 @@ HV_REF_POINT = np.array([
 ], dtype=float)
 
 # ── Convergence parameters ────────────────────────────────
-WINDOW          = 50      # generations to look back
+WINDOW          = 100     # generations to look back
 HV_TOL          = 0.005   # 0.5% improvement threshold
-MAX_GEN         = 2000    # hard safety stop
-
+GD_TOL          = 0.01    # generational distance threshold
+MAX_GEN         = 2000    # hard safety stop only — no fixed gen count
 
 class ConvergenceCallback(Callback):
     """
@@ -46,8 +46,9 @@ class ConvergenceCallback(Callback):
 
         # History lists — one entry per generation
         self.hypervolume    = []
-        self.best_per_obj   = []    # list of arrays, shape (n_obj,)
-        self.diversity      = []    # unique sequences / pop_size
+        self.best_per_obj   = []
+        self.diversity      = []
+        self.gen_dist       = []   # generational distance per generation
         self.gen_numbers    = []
 
         self._hv_calc = HV(ref_point=ref_point)
@@ -74,6 +75,19 @@ class ConvergenceCallback(Callback):
         # ── Best per objective ────────────────────────────
         best = feasible.min(axis=0) if len(feasible) > 0 else np.full(F.shape[1], np.nan)
 
+        # ── Generational distance ─────────────────────────
+        # Average distance each solution moved from previous generation
+        if len(self.best_per_obj) > 0:
+            prev_best = self.best_per_obj[-1]
+            if not np.any(np.isnan(prev_best)) and not np.any(np.isnan(best)):
+                gd = float(np.linalg.norm(best - prev_best))
+            else:
+                gd = 1.0
+        else:
+            gd = 1.0   # no history yet
+        self.gen_dist.append(gd)
+
+    
         # ── Diversity ─────────────────────────────────────
         X          = algorithm.pop.get("X")
         unique     = len(set(tuple(x) for x in X))
@@ -112,20 +126,46 @@ class ConvergenceCallback(Callback):
                   f"over last {self.window} generations)")
             algorithm.termination.force_termination = True
 
-    # ── Convergence check ─────────────────────────────────
     def _check_converged(self, gen):
         if len(self.hypervolume) < self.window + 1:
             return False   # not enough history yet
 
-        recent   = self.hypervolume[-self.window:]
-        oldest   = recent[0]
-        newest   = recent[-1]
-
+        # ── Condition 1: Hypervolume plateau ─────────────
+        recent  = self.hypervolume[-self.window:]
+        oldest  = recent[0]
+        newest  = recent[-1]
         if oldest == 0.0:
-            return False   # avoid divide by zero early on
+            return False
+        hv_improvement = abs(newest - oldest) / oldest
+        cond_hv = hv_improvement < self.hv_tol
 
-        improvement = abs(newest - oldest) / oldest
-        return improvement < self.hv_tol
+        # ── Condition 2: Best objectives unchanged ────────
+        recent_best = self.best_per_obj[-self.window:]
+        first_best  = recent_best[0]
+        last_best   = recent_best[-1]
+        if np.any(np.isnan(first_best)) or np.any(np.isnan(last_best)):
+            cond_obj = False
+        else:
+            obj_change = np.max(np.abs(last_best - first_best))
+            cond_obj   = obj_change < self.hv_tol   # same 0.5% tolerance
+
+        # ── Condition 3: Generational distance near zero ──
+        recent_gd = self.gen_dist[-self.window:]
+        cond_gd   = float(np.mean(recent_gd)) < GD_TOL
+
+        # ── All three must be true ────────────────────────
+        converged = cond_hv and cond_obj and cond_gd
+
+        if gen % 50 == 0:
+            print(f"         Convergence check → "
+                  f"HV:{cond_hv} "
+                  f"OBJ:{cond_obj} "
+                  f"GD:{cond_gd} "
+                  f"(hv_Δ={hv_improvement:.4f} "
+                  f"obj_Δ={obj_change:.4f} "
+                  f"gd={np.mean(recent_gd):.4f})")
+
+        return converged
 
     # ── Console output ────────────────────────────────────
     def _print_status(self, gen, hv, best, diversity, mut_rate=None):
@@ -153,8 +193,11 @@ class ConvergenceCallback(Callback):
         print("="*60)
         if self._converged_at:
             print(f"  Converged at generation : {self._converged_at}")
+            print(f"  (all 3 conditions met — HV plateau, "
+                  f"objective stability, GD < {GD_TOL})")
         else:
-            print(f"  Reached max generations : {self.gen_numbers[-1]}")
+            print(f"  Hit safety limit        : {self.gen_numbers[-1]} generations")
+            print(f"  (consider increasing MAX_GEN if solution quality is poor)")
         print(f"  Final hypervolume       : {self.hypervolume[-1]:.4f}")
         print(f"  Final diversity         : {self.diversity[-1]:.2f}")
         final_best = self.best_per_obj[-1]
