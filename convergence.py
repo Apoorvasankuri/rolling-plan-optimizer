@@ -17,14 +17,13 @@ MAX_MUTATION_RATE   = 0.15
 #   4: storage_mt_days (MT·days)
 #   5: storage_days    (days)
 HV_REF_POINT = np.array([
-    50.0,           # 50 hrs shift loss
-    5_000_000.0,    # Rs 50L section changeover cost
-    5_000_000.0,    # Rs 50L thickness changeover cost
-    500_000.0,      # 500k MT·days late
-    1_000_000.0,    # 1M MT·days storage
-    500.0           # 500 days early storage
+    1.2,   # sec_co_time     — slightly above 1 to give room
+    1.2,   # sec_co_cost
+    1.2,   # thk_co_cost
+    1.2,   # late_mt_days
+    1.2,   # storage_mt_days
+    1.2    # storage_days
 ], dtype=float)
-
 
 # ── Convergence parameters ────────────────────────────────
 WINDOW          = 50      # generations to look back
@@ -103,7 +102,7 @@ class ConvergenceCallback(Callback):
 
         # ── Print progress every 50 generations ──────────
         if gen % 50 == 0 or gen == 1:
-            self._print_status(gen, hv, best, diversity)
+            self._print_status(gen, hv, best, diversity, mut_rate=new_rate)
 
         # ── Check convergence ─────────────────────────────
         if self._check_converged(gen):
@@ -129,23 +128,22 @@ class ConvergenceCallback(Callback):
         return improvement < self.hv_tol
 
     # ── Console output ────────────────────────────────────
-    def _print_status(self, gen, hv, best, diversity):
-        hv_change = ""
-        if len(self.hypervolume) > 1:
-            prev = self.hypervolume[-2]
-            if prev > 0:
-                delta = (hv - prev) / prev * 100
-                hv_change = f"  Δ{delta:+.2f}%"
+    def _print_status(self, gen, hv, best, diversity, mut_rate=None):
+    hv_change = ""
+    if len(self.hypervolume) > 1:
+        prev = self.hypervolume[-2]
+        if prev > 0:
+            delta = (hv - prev) / prev * 100
+            hv_change = f"  Δ{delta:+.2f}%"
 
-        mut_rate = getattr(algorithm.mating.mutation, '_current_rate', None)
-        mut_str  = f"{mut_rate:.4f}" if mut_rate else "default"
+    mut_str = f"{mut_rate:.4f}" if mut_rate is not None else "default"
         print(
             f"Gen {gen:>5} | "
             f"HV: {hv:.4f}{hv_change:<12} | "
             f"Diversity: {diversity:.2f} | "
             f"MutRate: {mut_str} | "
-            f"BestCost: {best[1]:>12.0f} | "
-            f"BestLate: {best[3]:>10.0f}"
+            f"BestCost: {best[1] * 5_000_000:>12.0f} | "
+            f"BestLate: {best[3] * 500_000:>10.0f}"
         )
 
     # ── Summary after run ─────────────────────────────────

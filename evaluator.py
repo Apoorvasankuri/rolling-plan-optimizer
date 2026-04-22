@@ -6,8 +6,17 @@ import pandas as pd
 SHIFT_HRS     = 12.0
 STRETCH_MAX   = SHIFT_HRS * 1.3
 SEC_COST      = 24100.0
-THK_CO_HRS    = 0.5    # hours lost per thickness changeover — adjust to your mill data
+THK_CO_HRS    = 0.5
 
+# ── Normalisation denominators ────────────────────────────
+# Set to expected worst-case value for each objective
+# Objectives will be returned in range [0, ~1]
+NORM_SEC_CO_TIME     = 50.0
+NORM_SEC_CO_COST     = 5_000_000.0
+NORM_THK_CO_COST     = 5_000_000.0
+NORM_LATE_MT_DAYS    = 500_000.0
+NORM_STORAGE_MT_DAYS = 1_000_000.0
+NORM_STORAGE_DAYS    = 500.0
 
 # ── Changeover lookup helpers ─────────────────────────────
 
@@ -120,7 +129,7 @@ def evaluate(perm, camps, cap, mill, co):
         sec = c['section']
         thk = c['thickness']
         qty = float(c['qty'])
-        due = float(c['max_due'])   # bucket day
+        due = float(c['due'])       # single due date per campaign
 
         # ── Changeover from previous campaign ────────────
         if prev_sec is not None:
@@ -166,10 +175,10 @@ def evaluate(perm, camps, cap, mill, co):
         prev_thk = thk
 
     return np.array([
-        sec_co_time,
-        sec_co_cost,
-        thk_co_cost,
-        late_mt_days,
-        storage_mt_days,
-        storage_days
-    ], dtype=float)
+    sec_co_time     / NORM_SEC_CO_TIME,
+    sec_co_cost     / NORM_SEC_CO_COST,
+    thk_co_cost     / NORM_THK_CO_COST,
+    late_mt_days    / NORM_LATE_MT_DAYS,
+    storage_mt_days / NORM_STORAGE_MT_DAYS,
+    storage_days    / NORM_STORAGE_DAYS
+], dtype=float)

@@ -99,25 +99,16 @@ def load_loi(path):
 
 
 def build_campaigns(loi_df, mill):
-    """
-    Groups LOI rows into section×thickness campaigns for a given mill.
-    Each campaign is the unit of scheduling.
-    NaN thickness combinations (forbidden) are not enforced here —
-    that is handled in the evaluator.
-    """
     sub = loi_df[loi_df['mill'] == mill].copy()
 
     camps = sub.groupby(
-        ['section', 'thickness'], as_index=False
+        ['section', 'thickness', 'due_day'], as_index=False
     ).agg(
-        qty     =('qty',     'sum'),
-        min_due =('due_day', 'min'),
-        max_due =('due_day', 'max'),
-        mean_due=('due_day', 'mean')
+        qty=('qty', 'sum')
     )
+    camps['due']  = camps['due_day']   # single due date per campaign
     camps['mill'] = mill
     return camps.reset_index(drop=True)
-
 
 def load_changeover(path):
     xl = pd.ExcelFile(path)
