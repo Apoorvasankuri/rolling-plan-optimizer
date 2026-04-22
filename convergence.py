@@ -3,6 +3,10 @@ import time
 from pymoo.core.callback import Callback
 from pymoo.indicators.hv import HV
 
+# ── Adaptive mutation constants ───────────────────────────
+DIVERSITY_THRESHOLD = 0.20
+MAX_MUTATION_RATE   = 0.15
+
 
 # ── Reference point for hypervolume ──────────────────────
 # Set to worst acceptable values for each objective:
@@ -76,6 +80,21 @@ class ConvergenceCallback(Callback):
         unique     = len(set(tuple(x) for x in X))
         diversity  = unique / len(X)
 
+        # ── Adaptive mutation ─────────────────────────────
+        n_camps   = algorithm.problem.n_camps
+        base_rate = 1.0 / n_camps
+        if diversity < DIVERSITY_THRESHOLD:
+            # Scale rate up linearly as diversity falls
+            # diversity=0.20 → rate = base
+            # diversity=0.00 → rate = MAX_MUTATION_RATE
+            boost = (DIVERSITY_THRESHOLD - diversity) / DIVERSITY_THRESHOLD
+            new_rate = base_rate + boost * (MAX_MUTATION_RATE - base_rate)
+        else:
+            new_rate = base_rate
+
+        # Push rate into mutation operator
+        algorithm.mating.mutation._current_rate = new_rate
+
         # ── Store ─────────────────────────────────────────
         self.hypervolume.append(hv)
         self.best_per_obj.append(best)
@@ -118,10 +137,13 @@ class ConvergenceCallback(Callback):
                 delta = (hv - prev) / prev * 100
                 hv_change = f"  Δ{delta:+.2f}%"
 
+        mut_rate = getattr(algorithm.mating.mutation, '_current_rate', None)
+        mut_str  = f"{mut_rate:.4f}" if mut_rate else "default"
         print(
             f"Gen {gen:>5} | "
             f"HV: {hv:.4f}{hv_change:<12} | "
             f"Diversity: {diversity:.2f} | "
+            f"MutRate: {mut_str} | "
             f"BestCost: {best[1]:>12.0f} | "
             f"BestLate: {best[3]:>10.0f}"
         )
