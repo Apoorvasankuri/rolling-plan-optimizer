@@ -1,9 +1,11 @@
 import numpy as np
+import pandas as pd
 
 # ── Constants ─────────────────────────────────────────────
 SHIFT_HRS     = 12.0
-STRETCH_MAX   = SHIFT_HRS * 1.3   # 15.6 hours
+STRETCH_MAX   = SHIFT_HRS * 1.3
 SEC_COST      = 24100.0
+THK_CO_HRS    = 0.5    # hours lost per thickness changeover — adjust to your mill data
 
 
 # ── Changeover lookup helpers ─────────────────────────────
@@ -41,32 +43,19 @@ def get_thk_cost(co, t1, t2, mill):
 # ── Shift timing helper ───────────────────────────────────
 
 def advance_clock(clock, hours_needed):
-    """
-    Given current clock position within a shift and hours needed
-    for rolling a campaign:
+    shift_position = clock % SHIFT_HRS
+    remaining      = SHIFT_HRS - shift_position
 
-    - If hours_needed <= STRETCH_MAX:
-        Complete the campaign, stretching shift if needed.
-        Changeover happens post-shift at zero production cost.
-        Next campaign starts at beginning of next shift.
-        Returns (new_clock, productive_hrs_lost)
-          where productive_hrs_lost = 0 (campaign completed cleanly)
-
-    - If hours_needed > STRETCH_MAX:
-        Campaign spills across multiple shifts normally.
-        Returns (new_clock, 0)
-    """
-    shift_position = clock % SHIFT_HRS   # how far into current shift
-
-    if hours_needed <= STRETCH_MAX:
-        # Complete campaign this shift (stretch if needed)
+    if hours_needed <= remaining:
+        # Fits in current shift — no stretch needed
+        return clock + hours_needed, 0.0
+    elif hours_needed <= STRETCH_MAX:
+        # Needs stretch — jumps to end of current shift
         new_clock = (np.floor(clock / SHIFT_HRS) + 1) * SHIFT_HRS
         return new_clock, 0.0
     else:
-        # Campaign too long to fit in one stretched shift
-        new_clock = clock + hours_needed
-        return new_clock, 0.0
-
+        # Spans multiple shifts
+        return clock + hours_needed, 0.0
 
 def compute_changeover_clock(clock, co_hrs):
     """
@@ -92,7 +81,7 @@ def compute_changeover_clock(clock, co_hrs):
 
 # ── Main evaluation function ──────────────────────────────
 
-import pandas as pd
+
 
 def evaluate(perm, camps, cap, mill, co):
     """
@@ -143,7 +132,7 @@ def evaluate(perm, camps, cap, mill, co):
                 new_clock, hrs_lost = compute_changeover_clock(clock, co_hrs)
                 clock        = new_clock
                 sec_co_time += hrs_lost
-                sec_co_cost += SEC_COST
+                sec_co_cost += co['sec_time'].loc[prev_sec, sec] * SEC_COST   # cost scales with transition severity
 
             elif prev_thk != thk:
                 # Thickness changeover within same section
@@ -151,8 +140,7 @@ def evaluate(perm, camps, cap, mill, co):
                 if thk_c is None:
                     return PENALTY   # forbidden combination
                 if thk_c > 0:
-                    # Apply same overnight rule
-                    new_clock, _ = compute_changeover_clock(clock, 0.5)
+                    new_clock, _ = compute_changeover_clock(clock, THK_CO_HRS)
                     clock        = new_clock
                     thk_co_cost += thk_c
 

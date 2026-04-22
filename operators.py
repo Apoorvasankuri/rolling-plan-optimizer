@@ -65,12 +65,17 @@ class SwapMutation(Mutation):
         super().__init__()
 
     def _do(self, problem, X, **kwargs):
-        rate = 1.0 / problem.n_camps
+    rate = 1.0 / problem.n_camps
 
-        for i in range(len(X)):
-            for j in range(problem.n_camps):
-                if np.random.random() < rate:
-                    k         = np.random.randint(problem.n_camps)
-                    X[i, j], X[i, k] = X[i, k], X[i, j]
+    for i in range(len(X)):
+        for j in range(problem.n_camps):
+            if np.random.random() < rate:
+                # Exclude j to prevent self-swap
+                k        = np.random.choice(
+                               [x for x in range(problem.n_camps) if x != j]
+                           )
+                tmp      = int(X[i, k])
+                X[i, k]  = X[i, j]
+                X[i, j]  = tmp
 
-        return X
+    return X
