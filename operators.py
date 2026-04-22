@@ -71,7 +71,6 @@ class SwapMutation(Mutation):
     for i in range(len(X)):
         for j in range(problem.n_camps):
             if np.random.random() < rate:
-                # Exclude j to prevent self-swap
                 k        = np.random.choice(
                                [x for x in range(problem.n_camps) if x != j]
                            )
