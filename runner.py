@@ -28,15 +28,19 @@ def run_nsga3(camps, cap, mill, co,
     """
     problem = RollingPlanProblem(camps, cap, mill, co)
 
-    # 6 objectives, 5 partitions → 252 reference directions
+    # Two-layer reference directions
+    # Layer 1 — dense, more reference points overall
+    # Layer 2 — sparse, ensures no region is ignored
     ref_dirs = get_reference_directions(
-        "das-dennis", 6, n_partitions=5
+        "multi-layer",
+        get_reference_directions("das-dennis", 6, n_partitions=6),
+        get_reference_directions("das-dennis", 6, n_partitions=3),
     )
 
     # Population must be >= number of reference directions
     pop_size = max(pop_size, len(ref_dirs))
     print(f"\n[{mill}] Campaigns: {len(camps)} | "
-          f"Ref dirs: {len(ref_dirs)} | Pop size: {pop_size}")
+          f"Ref dirs: {len(ref_dirs)} (two-layer) | Pop size: {pop_size}")
     print(f"[{mill}] Max generations: {n_gen} | "
           f"Convergence window: 50 gens | Tolerance: 0.5%\n")
 
