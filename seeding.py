@@ -88,7 +88,7 @@ def seed_group_by_section(camps):
 
     # Order sections by their earliest due date
     sec_order = (
-        df.groupby('section')['min_due']
+        df.groupby('section')['due']
         .min()
         .sort_values()
         .index.tolist()
@@ -110,7 +110,7 @@ def seed_earliest_due(camps):
     """
     df = camps.copy()
     df['_idx'] = np.arange(len(df))
-    df = df.sort_values(['min_due', 'mean_due', 'section', 'thickness'])
+    df = df.sort_values(['due', 'section', 'thickness'])
     return np.array(df['_idx'].tolist(), dtype=int)
 
 
@@ -265,3 +265,95 @@ def build_seeded_population(n_camps, pop_size, camps, co,
           f"= {pop_size} total\n")
 
     return pop_array
+
+def compute_hv_ref_point(camps, cap, mill, co, margin=0.15):
+    """
+    Runs nearest-neighbour from every possible starting campaign.
+    Evaluates each sequence.
+    Returns reference point = worst value per objective × (1 + margin).
+    Separate for SM and LM since capacity and cost scales differ.
+    """
+    from evaluator import evaluate
+
+    n      = len(camps)
+    all_F  = []
+
+    print(f"[{mill}] Computing HV reference point "
+          f"({n} NN runs from all starting points)...")
+
+    for start_idx in range(n):
+        # Build NN sequence starting from start_idx
+        visited  = [False] * n
+        sequence = [start_idx]
+        visited[start_idx] = True
+
+        for _ in range(n - 1):
+            current  = sequence[-1]
+            cur_sec  = camps.iloc[current]['section']
+            cur_thk  = camps.iloc[current]['thickness']
+            cur_mill = camps.iloc[current]['mill']
+
+            best_idx  = None
+            best_cost = np.inf
+
+            for j in range(n):
+                if visited[j]:
+                    continue
+                nxt_sec = camps.iloc[j]['section']
+                nxt_thk = camps.iloc[j]['thickness']
+
+                if cur_sec != nxt_sec:
+                    try:
+                        t     = co['sec_time'].loc[cur_sec, nxt_sec]
+                        sec_t = float(t) if not pd.isna(t) else 999.0
+                    except KeyError:
+                        sec_t = 999.0
+                else:
+                    sec_t = 0.0
+
+                if cur_thk != nxt_thk and cur_sec == nxt_sec:
+                    key = f'thk_cost_{cur_mill}'
+                    try:
+                        c     = co[key].loc[cur_thk, nxt_thk]
+                        thk_c = float(c) if not pd.isna(c) else 0.0
+                    except KeyError:
+                        thk_c = 0.0
+                else:
+                    thk_c = 0.0
+
+                combined = sec_t * 1e6 + thk_c
+                if combined < best_cost:
+                    best_cost = combined
+                    best_idx  = j
+
+            sequence.append(best_idx)
+            visited[best_idx] = True
+
+        # Evaluate this sequence
+        perm = np.array(sequence, dtype=int)
+        F    = evaluate(perm, camps, cap, mill, co)
+
+        # Skip penalty solutions
+        if np.all(F < 1e8):
+            all_F.append(F)
+
+    if len(all_F) == 0:
+        print(f"[{mill}] WARNING: all NN sequences infeasible, "
+              f"using fallback ref point [1.2 x 6]")
+        return np.ones(6) * 1.2
+
+    all_F     = np.array(all_F)
+    worst     = all_F.max(axis=0)          # worst per objective
+    ref_point = worst * (1.0 + margin)     # add margin
+
+    print(f"[{mill}] Reference point computed from "
+          f"{len(all_F)} feasible NN sequences:")
+    labels = [
+        "Sec CO time (norm)", "Sec CO cost (norm)",
+        "Thk CO cost (norm)", "Late (norm)",
+        "Storage MT (norm)",  "Storage days (norm)"
+    ]
+    for i, (label, val) in enumerate(zip(labels, ref_point)):
+        print(f"       {label:<22}: {val:.4f}")
+
+    return ref_point

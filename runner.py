@@ -6,7 +6,8 @@ from pymoo.termination import get_termination
 
 from problem import RollingPlanProblem
 from operators import PermutationSampling, OrderCrossover, SwapMutation
-from convergence import ConvergenceCallback, MAX_GEN, HV_REF_POINT
+from convergence import ConvergenceCallback, MAX_GEN
+from seeding import compute_hv_ref_point
 
 
 def run_nsga3(camps, cap, mill, co,
@@ -39,10 +40,19 @@ def run_nsga3(camps, cap, mill, co,
     print(f"[{mill}] Max generations: {n_gen} | "
           f"Convergence window: 50 gens | Tolerance: 0.5%\n")
 
+    # ── Compute HV reference point from NN baseline ───────
+    ref_point = compute_hv_ref_point(
+        camps   = camps,
+        cap     = cap,
+        mill    = mill,
+        co      = co,
+        margin  = 0.15
+    )
+
     # ── Convergence callback ──────────────────────────────
     callback = ConvergenceCallback(
-        ref_point = HV_REF_POINT,
-        window    = 50,
+        ref_point = ref_point,
+        window    = 100,
         hv_tol    = 0.005
     )
 

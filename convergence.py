@@ -16,14 +16,8 @@ MAX_MUTATION_RATE   = 0.15
 #   3: late_mt_days    (MT·days)
 #   4: storage_mt_days (MT·days)
 #   5: storage_days    (days)
-HV_REF_POINT = np.array([
-    1.2,   # sec_co_time     — slightly above 1 to give room
-    1.2,   # sec_co_cost
-    1.2,   # thk_co_cost
-    1.2,   # late_mt_days
-    1.2,   # storage_mt_days
-    1.2    # storage_days
-], dtype=float)
+# HV_REF_POINT is now computed dynamically per mill
+# in runner.py via compute_hv_ref_point() in seeding.py
 
 # ── Convergence parameters ────────────────────────────────
 WINDOW          = 100     # generations to look back
@@ -38,7 +32,13 @@ class ConvergenceCallback(Callback):
     Sets algorithm.termination flag when converged.
     """
 
-    def __init__(self, ref_point=HV_REF_POINT, window=WINDOW, hv_tol=HV_TOL):
+    def __init__(self, ref_point=None, window=WINDOW, hv_tol=HV_TOL):
+    super().__init__()
+    if ref_point is None:
+        raise ValueError(
+            "ref_point must be provided — "
+            "compute via compute_hv_ref_point() in seeding.py"
+        )
         super().__init__()
         self.ref_point  = ref_point
         self.window     = window
