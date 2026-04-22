@@ -5,6 +5,10 @@ from pymoo.core.sampling import Sampling
 
 from seeding import build_seeded_population
 
+BASE_MUTATION_RATE     = None   # defaults to 1/n_camps
+DIVERSITY_THRESHOLD    = 0.20   # below this, boost mutation
+MAX_MUTATION_RATE      = 0.15   # ceiling when boosting
+STRETCH_MAX            = 4.0    # hours — if rolling time exceeds this, no stretch
 
 class PermutationSampling(Sampling):
     """
@@ -84,17 +88,14 @@ class OrderCrossover(Crossover):
 
 
 class SwapMutation(Mutation):
-    """
-    Swap mutation for permutation chromosomes.
-    Each position has probability 1/n_camps of being
-    swapped with a random other position.
-    """
-
     def __init__(self):
         super().__init__()
+        self._current_rate = None   # tracked externally by callback
 
     def _do(self, problem, X, **kwargs):
-        rate = 1.0 / problem.n_camps
+        # Use externally set rate if available, else default 1/n
+        rate = self._current_rate if self._current_rate is not None \
+               else 1.0 / problem.n_camps
 
         for i in range(len(X)):
             for j in range(problem.n_camps):
@@ -105,5 +106,4 @@ class SwapMutation(Mutation):
                     tmp      = int(X[i, k])
                     X[i, k]  = X[i, j]
                     X[i, j]  = tmp
-
         return X
