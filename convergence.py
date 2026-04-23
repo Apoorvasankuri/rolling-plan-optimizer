@@ -33,13 +33,12 @@ class ConvergenceCallback(Callback):
     """
 
     def __init__(self, ref_point=None, window=WINDOW, hv_tol=HV_TOL):
-    super().__init__()
-    if ref_point is None:
-        raise ValueError(
-            "ref_point must be provided — "
-            "compute via compute_hv_ref_point() in seeding.py"
-        )
         super().__init__()
+        if ref_point is None:
+            raise ValueError(
+                "ref_point must be provided — "
+                "compute via compute_hv_ref_point() in seeding.py"
+            )
         self.ref_point  = ref_point
         self.window     = window
         self.hv_tol     = hv_tol
@@ -66,11 +65,14 @@ class ConvergenceCallback(Callback):
             hv = 0.0
         else:
             # Clip to ref point — HV requires F <= ref_point
-            clipped = np.minimum(feasible, self.ref_point)
-            try:
-                hv = self._hv_calc.do(clipped)
-            except Exception:
+            valid = feasible[np.all(feasible < self.ref_point, axis=1)]
+            if len(valid) == 0:
                 hv = 0.0
+            else:
+                try:
+                    hv = self._hv_calc.do(valid)
+                except Exception:
+                    hv = 0.0
 
         # ── Best per objective ────────────────────────────
         best = feasible.min(axis=0) if len(feasible) > 0 else np.full(F.shape[1], np.nan)
@@ -145,6 +147,7 @@ class ConvergenceCallback(Callback):
         last_best   = recent_best[-1]
         if np.any(np.isnan(first_best)) or np.any(np.isnan(last_best)):
             cond_obj = False
+            obj_change = float('nan')
         else:
             obj_change = np.max(np.abs(last_best - first_best))
             cond_obj   = obj_change < self.hv_tol   # same 0.5% tolerance
@@ -169,14 +172,14 @@ class ConvergenceCallback(Callback):
 
     # ── Console output ────────────────────────────────────
     def _print_status(self, gen, hv, best, diversity, mut_rate=None):
-    hv_change = ""
-    if len(self.hypervolume) > 1:
-        prev = self.hypervolume[-2]
-        if prev > 0:
-            delta = (hv - prev) / prev * 100
-            hv_change = f"  Δ{delta:+.2f}%"
+        hv_change = ""
+        if len(self.hypervolume) > 1:
+            prev = self.hypervolume[-2]
+            if prev > 0:
+                delta = (hv - prev) / prev * 100
+                hv_change = f"  Δ{delta:+.2f}%"
 
-    mut_str = f"{mut_rate:.4f}" if mut_rate is not None else "default"
+        mut_str = f"{mut_rate:.4f}" if mut_rate is not None else "default"
         print(
             f"Gen {gen:>5} | "
             f"HV: {hv:.4f}{hv_change:<12} | "

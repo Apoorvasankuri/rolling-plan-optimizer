@@ -93,17 +93,11 @@ class SwapMutation(Mutation):
         self._current_rate = None   # tracked externally by callback
 
     def _do(self, problem, X, **kwargs):
-        # Use externally set rate if available, else default 1/n
         rate = self._current_rate if self._current_rate is not None \
                else 1.0 / problem.n_camps
 
         for i in range(len(X)):
-            for j in range(problem.n_camps):
-                if np.random.random() < rate:
-                    k = np.random.choice(
-                        [x for x in range(problem.n_camps) if x != j]
-                    )
-                    tmp      = int(X[i, k])
-                    X[i, k]  = X[i, j]
-                    X[i, j]  = tmp
+            if np.random.random() < rate:
+                j, k = np.random.choice(problem.n_camps, 2, replace=False)
+                X[i, j], X[i, k] = X[i, k], X[i, j]
         return X

@@ -184,3 +184,72 @@ def load_changeover(path):
             co[f'thk_cost_{mill_tag}'] = thk_cost
 
     return co
+
+def load_actual_plan(path, mill):
+    """
+    Loads actual historical rolling plan from Excel.
+    Row 0 = header, row 1 = blank — skip row 1.
+    Returns DataFrame sorted by start_date (actual rolling sequence).
+    """
+    df = pd.read_excel(path, header=0, skiprows=[1])
+    df.columns = [
+        'start_date', 'end_date', 'mill_code', 'loi', 'loi_dt',
+        'location', 'bucket', 'pg_npg', 'grade', 'series',
+        'gr', 'sections', 'qty', 'project',
+        'billet_status', 'billet_order_status', 'remarks'
+    ]
+    df = df.dropna(subset=['sections', 'qty'])
+    df['qty']       = pd.to_numeric(df['qty'], errors='coerce').fillna(0)
+    df              = df[df['qty'] > 0].copy()
+
+    parsed          = df['sections'].apply(parse_section)
+    df['section']   = parsed.apply(lambda x: x[0])
+    df['thickness'] = parsed.apply(lambda x: x[1])
+    df['mill']      = df['section'].apply(assign_mill)
+    df['due_day']   = df['bucket'].apply(parse_bucket_date)
+    df['due']       = df['due_day']
+
+    df = df[df['mill'] == mill].copy()
+    return df.reset_index(drop=True)
+
+
+def build_actual_permutation(actual_df, camps):
+    """
+    Maps actual rolling sequence (LOI rows ordered by start_date)
+    to a permutation of campaign indices.
+
+    Each unique (section, thickness, due) combination in actual_df
+    is matched to a campaign in camps. First appearance order defines
+    the sequence. Campaigns not in actual plan are appended at end.
+
+    Returns (perm, n_missing) where n_missing = count of campaigns
+    in actual plan not found in camps (due to date bucket differences).
+    """
+    seen  = {}
+    order = []
+    for _, row in actual_df.iterrows():
+        key = (row['section'], row['thickness'], row['due'])
+        if key not in seen:
+            seen[key] = len(seen)
+            order.append(key)
+
+    camp_lookup = {}
+    for i, row in camps.iterrows():
+        key = (row['section'], row['thickness'], row['due'])
+        camp_lookup[key] = i
+
+    perm    = []
+    missing = 0
+    for key in order:
+        if key in camp_lookup:
+            perm.append(camp_lookup[key])
+        else:
+            missing += 1
+
+    # Append campaigns not covered by actual plan
+    used = set(perm)
+    for i in range(len(camps)):
+        if i not in used:
+            perm.append(i)
+
+    return np.array(perm, dtype=int), missing

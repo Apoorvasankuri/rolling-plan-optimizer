@@ -42,7 +42,7 @@ def run_nsga3(camps, cap, mill, co,
     print(f"\n[{mill}] Campaigns: {len(camps)} | "
           f"Ref dirs: {len(ref_dirs)} (two-layer) | Pop size: {pop_size}")
     print(f"[{mill}] Max generations: {n_gen} | "
-          f"Convergence window: 50 gens | Tolerance: 0.5%\n")
+      f"Convergence window: 100 gens | Tolerance: 0.5%\n")
 
     # ── Compute HV reference point from NN baseline ───────
     ref_point = compute_hv_ref_point(

@@ -142,7 +142,7 @@ def evaluate(perm, camps, cap, mill, co):
                 new_clock, hrs_lost = compute_changeover_clock(clock, co_hrs)
                 clock        = new_clock
                 sec_co_time += hrs_lost
-                sec_co_cost += co['sec_time'].loc[prev_sec, sec] * SEC_COST   # cost scales with transition severity
+                sec_co_cost += SEC_COST  # fixed cost per section changeover
 
             elif prev_thk != thk:
                 # Thickness changeover within same section
