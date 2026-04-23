@@ -41,18 +41,19 @@ OBJ_LABELS = [
 
 # ── Normalisation denominators (must match evaluator.py) ──
 OBJ_DENOMS = [
-    50.0,
-    5_000_000.0,
-    5_000_000.0,
-    500_000.0,
-    1_000_000.0,
-    500.0,
+    400.0,
+    10_000_000.0,
+    3_000_000.0,
+    60_000.0,
+    5_000.0,
+    250.0,
 ]
 
 
 # ── Per-mill runner (called in thread pool) ───────────────
 
-def run_mill(mill, camps, cap, co, n_gen, pop_size, seed, last_best_perm):
+def run_mill(mill, camps, cap, co, n_gen, pop_size, seed,
+             last_best_perm, actual_perm):
     """
     Runs NSGA-III for one mill.
     Returns (mill, result, callback) or (mill, None, None) on error.
@@ -76,7 +77,8 @@ def run_mill(mill, camps, cap, co, n_gen, pop_size, seed, last_best_perm):
             n_gen          = n_gen,
             pop_size       = pop_size,
             seed           = seed,
-            last_best_perm = last_best_perm
+            last_best_perm = last_best_perm,
+            actual_perm    = actual_perm
         )
         elapsed = time.time() - t0
         print(f"[{mill}] Completed in {elapsed:.1f}s")
@@ -181,6 +183,10 @@ def main():
                         help='Min population size (default 252)')
     parser.add_argument('--seed',     type=int,   default=42,
                         help='Random seed (default 42)')
+    parser.add_argument('--actual-sm', default=None,
+                        help='Path to actual SM rolling plan Excel file')
+    parser.add_argument('--actual-lm', default=None,
+                        help='Path to actual LM rolling plan Excel file')
     parser.add_argument('--warm-sm',  default=None,
                         help='Path to SM warm start .npy file')
     parser.add_argument('--warm-lm',  default=None,
@@ -210,7 +216,27 @@ def main():
 
     print(f"  SM campaigns    : {len(camps_sm)}")
     print(f"  LM campaigns    : {len(camps_lm)}")
+# ── Load actual rolling plans (optional) ─────────────
+    actual_sm = actual_lm = None
+    if args.actual_sm:
+        try:
+            actual_df       = load_actual_plan(args.actual_sm, 'SM')
+            actual_sm, miss = build_actual_permutation(actual_df, camps_sm)
+            print(f"  SM actual plan  : loaded "
+                  f"({miss} campaigns not matched — appended at end)")
+        except Exception as e:
+            print(f"  SM actual plan  : failed to load — {e}")
 
+    if args.actual_lm:
+        try:
+            actual_df       = load_actual_plan(args.actual_lm, 'LM')
+            actual_lm, miss = build_actual_permutation(actual_df, camps_lm)
+            print(f"  LM actual plan  : loaded "
+                  f"({miss} campaigns not matched — appended at end)")
+        except Exception as e:
+            print(f"  LM actual plan  : failed to load — {e}")
+
+    
     # ── Load warm starts ──────────────────────────────────
     warm_sm = load_warm_perm(args.warm_sm)
     warm_lm = load_warm_perm(args.warm_lm)
@@ -219,8 +245,8 @@ def main():
     print("\nLaunching parallel optimisation for SM and LM mills...")
 
     mill_configs = [
-        ('SM', camps_sm, args.sm_cap, warm_sm),
-        ('LM', camps_lm, args.lm_cap, warm_lm),
+        ('SM', camps_sm, args.sm_cap, warm_sm, actual_sm),
+        ('LM', camps_lm, args.lm_cap, warm_lm, actual_lm),
     ]
 
     results = {}
@@ -231,9 +257,9 @@ def main():
             executor.submit(
                 run_mill,
                 mill, camps, cap, co,
-                args.n_gen, args.pop, args.seed, warm
+                args.n_gen, args.pop, args.seed, warm, actual
             ): mill
-            for mill, camps, cap, warm in mill_configs
+            for mill, camps, cap, warm, actual in mill_configs
         }
 
         for future in concurrent.futures.as_completed(futures):
