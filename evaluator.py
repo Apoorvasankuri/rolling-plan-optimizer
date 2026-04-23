@@ -11,12 +11,12 @@ THK_CO_HRS    = 0.5
 # ── Normalisation denominators ────────────────────────────
 # Set to expected worst-case value for each objective
 # Objectives will be returned in range [0, ~1]
-NORM_SEC_CO_TIME     = 50.0
-NORM_SEC_CO_COST     = 5_000_000.0
-NORM_THK_CO_COST     = 5_000_000.0
-NORM_LATE_MT_DAYS    = 500_000.0
-NORM_STORAGE_MT_DAYS = 1_000_000.0
-NORM_STORAGE_DAYS    = 500.0
+NORM_SEC_CO_TIME     = 400.0
+NORM_SEC_CO_COST     = 10_000_000.0
+NORM_THK_CO_COST     = 3_000_000.0
+NORM_LATE_MT_DAYS    = 60_000.0
+NORM_STORAGE_MT_DAYS = 5_000.0
+NORM_STORAGE_DAYS    = 250.0
 
 # ── Changeover lookup helpers ─────────────────────────────
 

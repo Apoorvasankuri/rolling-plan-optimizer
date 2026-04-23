@@ -12,7 +12,7 @@ from seeding import compute_hv_ref_point
 
 def run_nsga3(camps, cap, mill, co,
               n_gen=MAX_GEN, pop_size=252, seed=42,
-              last_best_perm=None):
+              last_best_perm=None, actual_perm=None):
     """
     Parameters
     ----------
@@ -44,14 +44,35 @@ def run_nsga3(camps, cap, mill, co,
     print(f"[{mill}] Max generations: {n_gen} | "
       f"Convergence window: 100 gens | Tolerance: 0.5%\n")
 
-    # ── Compute HV reference point from NN baseline ───────
-    ref_point = compute_hv_ref_point(
-        camps   = camps,
-        cap     = cap,
-        mill    = mill,
-        co      = co,
-        margin  = 0.15
+    # ── Compute HV reference point ────────────────────────
+    # Always compute NN+random baseline (covers full objective range)
+    # If actual plan provided, take per-objective maximum of both
+    nn_ref = compute_hv_ref_point(
+        camps  = camps,
+        cap    = cap,
+        mill   = mill,
+        co     = co,
+        margin = 0.15
     )
+
+    if actual_perm is not None:
+        from seeding import compute_hv_ref_point_from_actual
+        actual_ref = compute_hv_ref_point_from_actual(
+            actual_perm = actual_perm,
+            camps       = camps,
+            cap         = cap,
+            mill        = mill,
+            co          = co,
+            margin      = 0.15
+        )
+        ref_point = np.maximum(nn_ref, actual_ref)
+        print(f"[{mill}] Final ref point (max of NN and actual plan):")
+        labels = ["sec_co_time", "sec_co_cost", "thk_co_cost",
+                  "late", "storage_mt", "storage_days"]
+        for l, v in zip(labels, ref_point):
+            print(f"       {l:<20}: {v:.4f}")
+    else:
+        ref_point = nn_ref
 
     # ── Convergence callback ──────────────────────────────
     callback = ConvergenceCallback(

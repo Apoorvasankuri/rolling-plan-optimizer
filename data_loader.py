@@ -185,6 +185,7 @@ def load_changeover(path):
 
     return co
 
+
 def load_actual_plan(path, mill):
     """
     Loads actual historical rolling plan from Excel.

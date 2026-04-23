@@ -24,7 +24,8 @@ import time
 import numpy as np
 import concurrent.futures
 
-from data_loader import load_loi, load_changeover, build_campaigns
+from data_loader import (load_loi, load_changeover, build_campaigns,
+                         load_actual_plan, build_actual_permutation)
 from runner import run_nsga3, pick_best_per_objective, pick_balanced
 
 

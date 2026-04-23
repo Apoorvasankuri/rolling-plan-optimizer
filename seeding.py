@@ -22,7 +22,7 @@ def seed_nearest_neighbour(camps, co):
     sequence = []
 
     # Start from earliest due date
-    start = int(camps['mean_due'].idxmin())
+    start = int(camps['due'].idxmin())
     sequence.append(start)
     visited[start] = True
 
@@ -57,7 +57,13 @@ def seed_nearest_neighbour(camps, co):
                 key = f'thk_cost_{cur_mill}'
                 try:
                     c = co[key].loc[cur_thk, nxt_thk]
-                    thk_c = float(c) if not pd.isna(c) else 0.0
+                    if pd.isna(c):
+                        combined = 999e6
+                        if combined < best_cost:
+                            best_cost = combined
+                            best_idx  = j
+                        continue
+                    thk_c = float(c)
                 except KeyError:
                     thk_c = 0.0
             else:
@@ -332,22 +338,28 @@ def compute_hv_ref_point(camps, cap, mill, co, margin=0.15):
         # Evaluate this sequence
         perm = np.array(sequence, dtype=int)
         F    = evaluate(perm, camps, cap, mill, co)
+        if np.all(F < 1e8):
+            all_F.append(F)
 
-        # Skip penalty solutions
+    # ── Random sequences — capture objectives NN ignores ──
+    rng = np.random.default_rng(seed=0)
+    for _ in range(50):
+        perm = rng.permutation(n)
+        F    = evaluate(perm, camps, cap, mill, co)
         if np.all(F < 1e8):
             all_F.append(F)
 
     if len(all_F) == 0:
-        print(f"[{mill}] WARNING: all NN sequences infeasible, "
-              f"using fallback ref point [1.2 x 6]")
-        return np.ones(6) * 1.2
+        print(f"[{mill}] WARNING: all sequences infeasible, "
+              f"using fallback ref point [2.0 x 6]")
+        return np.ones(6) * 2.0
 
     all_F     = np.array(all_F)
-    worst     = all_F.max(axis=0)          # worst per objective
-    ref_point = worst * (1.0 + margin)     # add margin
+    worst     = all_F.max(axis=0)
+    ref_point = worst * (1.0 + margin)
 
-    print(f"[{mill}] Reference point computed from "
-          f"{len(all_F)} feasible NN sequences:")
+    print(f"[{mill}] Reference point from "
+          f"{len(all_F)} sequences ({n} NN + 50 random):")
     labels = [
         "Sec CO time (norm)", "Sec CO cost (norm)",
         "Thk CO cost (norm)", "Late (norm)",
@@ -355,5 +367,96 @@ def compute_hv_ref_point(camps, cap, mill, co, margin=0.15):
     ]
     for i, (label, val) in enumerate(zip(labels, ref_point)):
         print(f"       {label:<22}: {val:.4f}")
+
+    return ref_point
+
+def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
+                                      margin=0.15):
+    """
+    Evaluates the actual historical rolling plan permutation.
+    Uses its objective values as the HV reference point.
+
+    Forbidden transitions in the actual plan are treated as
+    high-cost (not 1e9 penalty) so the plan can still serve
+    as a meaningful baseline.
+
+    Returns ref_point = actual_F * (1 + margin)
+    """
+    from evaluator import (SHIFT_HRS, THK_CO_HRS, SEC_COST,
+                           get_sec_time, get_thk_cost,
+                           compute_changeover_clock, advance_clock,
+                           NORM_SEC_CO_TIME, NORM_SEC_CO_COST,
+                           NORM_THK_CO_COST, NORM_LATE_MT_DAYS,
+                           NORM_STORAGE_MT_DAYS, NORM_STORAGE_DAYS)
+
+    denoms = np.array([
+        NORM_SEC_CO_TIME, NORM_SEC_CO_COST, NORM_THK_CO_COST,
+        NORM_LATE_MT_DAYS, NORM_STORAGE_MT_DAYS, NORM_STORAGE_DAYS
+    ])
+
+    sec_co_time = sec_co_cost = thk_co_cost = 0.0
+    late_mt_days = storage_mt_days = storage_days = 0.0
+    clock = 0.0
+    prev_sec = prev_thk = None
+    n_forbidden = 0
+
+    for pos in range(len(actual_perm)):
+        idx = int(actual_perm[pos])
+        c   = camps.iloc[idx]
+        sec = c['section']; thk = c['thickness']
+        qty = float(c['qty']); due = float(c['due'])
+
+        if prev_sec is not None:
+            if prev_sec != sec:
+                co_hrs = get_sec_time(co, prev_sec, sec)
+                if co_hrs is None:
+                    co_hrs = SHIFT_HRS
+                    n_forbidden += 1
+                new_clock, hrs_lost = compute_changeover_clock(clock, co_hrs)
+                clock        = new_clock
+                sec_co_time += hrs_lost
+                try:
+                    sec_co_cost += co['sec_time'].loc[prev_sec, sec] * SEC_COST
+                except Exception:
+                    sec_co_cost += SHIFT_HRS * SEC_COST
+            elif prev_thk != thk:
+                thk_c = get_thk_cost(co, prev_thk, thk, mill)
+                if thk_c is None:
+                    thk_c = float(denoms[2]) * 0.8
+                    n_forbidden += 1
+                if thk_c > 0:
+                    new_clock, _ = compute_changeover_clock(clock, THK_CO_HRS)
+                    clock        = new_clock
+                    thk_co_cost += thk_c
+
+        roll_hrs          = (qty / cap) * SHIFT_HRS
+        new_clock, _      = advance_clock(clock, roll_hrs)
+        clock             = new_clock
+        finish_day        = clock / SHIFT_HRS
+
+        if finish_day > due:
+            late_mt_days    += qty * (finish_day - due)
+        elif finish_day < due:
+            early_days       = due - finish_day
+            storage_mt_days += qty * early_days
+            storage_days    += early_days
+
+        prev_sec = sec; prev_thk = thk
+
+    raw = np.array([sec_co_time, sec_co_cost, thk_co_cost,
+                    late_mt_days, storage_mt_days, storage_days])
+    actual_F  = raw / denoms
+    ref_point = actual_F * (1.0 + margin)
+
+    labels = [
+        "Sec CO time (norm)", "Sec CO cost (norm)",
+        "Thk CO cost (norm)", "Late (norm)",
+        "Storage MT (norm)",  "Storage days (norm)"
+    ]
+    note = f" ({n_forbidden} forbidden transitions treated as high-cost)" \
+           if n_forbidden else ""
+    print(f"[{mill}] HV ref point from actual rolling plan{note}:")
+    for i, (label, val) in enumerate(zip(labels, ref_point)):
+        print(f"       {label:<22}: {val:.4f}  (actual={actual_F[i]:.4f})")
 
     return ref_point
