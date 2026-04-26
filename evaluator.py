@@ -143,13 +143,11 @@ def evaluate(perm, camps, cap, mill, co):
                 sec_co_cost += SEC_COST  # fixed cost per section changeover
 
             elif prev_thk != thk:
-                # Thickness changeover within same section
                 thk_c = get_thk_cost(co, prev_thk, thk, mill)
                 if thk_c is None:
-                    return PENALTY   # forbidden combination
+                    return PENALTY
                 if thk_c > 0:
-                    new_clock, _ = compute_changeover_clock(clock, THK_CO_HRS)
-                    clock        = new_clock
+                    clock       += THK_CO_HRS   # just burns 0.5 hrs in place, no shift jump
                     thk_co_cost += thk_c
 
         # ── Rolling time for this campaign ────────────────
