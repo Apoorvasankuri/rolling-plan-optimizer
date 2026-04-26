@@ -98,17 +98,34 @@ def load_loi(path):
     return df.reset_index(drop=True)
 
 
+MILL_CAPACITY = {'SM': 150.0, 'LM': 250.0}
+
 def build_campaigns(loi_df, mill):
     sub = loi_df[loi_df['mill'] == mill].copy()
+    cap = MILL_CAPACITY[mill]
 
-    camps = sub.groupby(
+    # Step 1 — group by section + thickness + due_day
+    grouped = sub.groupby(
         ['section', 'thickness', 'due_day'], as_index=False
-    ).agg(
-        qty=('qty', 'sum')
-    )
-    camps['due']  = camps['due_day']   # single due date per campaign
-    camps['mill'] = mill
-    return camps.reset_index(drop=True)
+    ).agg(qty=('qty', 'sum'))
+
+    # Step 2 — split each group into shift-capacity chunks
+    rows = []
+    for _, row in grouped.iterrows():
+        remaining = row['qty']
+        while remaining > 0:
+            chunk = min(remaining, cap)
+            rows.append({
+                'section'  : row['section'],
+                'thickness': row['thickness'],
+                'qty'      : chunk,
+                'due'      : row['due_day'],
+                'mill'     : mill
+            })
+            remaining -= chunk
+
+    camps = pd.DataFrame(rows).reset_index(drop=True)
+    return camps
 
 def load_changeover(path):
     xl = pd.ExcelFile(path)
