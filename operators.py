@@ -97,7 +97,12 @@ class SwapMutation(Mutation):
                else 1.0 / problem.n_camps
 
         for i in range(len(X)):
-            if np.random.random() < rate:
+            # Always do at least one swap
+            j, k = np.random.choice(problem.n_camps, 2, replace=False)
+            X[i, j], X[i, k] = X[i, k], X[i, j]
+
+            # Then keep swapping with probability `rate` until it fails
+            while np.random.random() < rate:
                 j, k = np.random.choice(problem.n_camps, 2, replace=False)
                 X[i, j], X[i, k] = X[i, k], X[i, j]
         return X
