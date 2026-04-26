@@ -60,9 +60,7 @@ def advance_clock(clock, hours_needed):
         # Fits in current shift — no stretch needed
         return clock + hours_needed, 0.0
     elif hours_needed <= STRETCH_MAX:
-        # Needs stretch — jumps to end of current shift
-        new_clock = (np.floor(clock / SHIFT_HRS) + 1) * SHIFT_HRS
-        return new_clock, 0.0
+    return clock + hours_needed, 0.0  # roll through, no time wasted
     else:
         # Spans multiple shifts
         return clock + hours_needed, 0.0

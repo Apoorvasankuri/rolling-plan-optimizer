@@ -416,7 +416,7 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
                 clock        = new_clock
                 sec_co_time += hrs_lost
                 try:
-                    sec_co_cost += co['sec_time'].loc[prev_sec, sec] * SEC_COST
+                    sec_co_cost += SEC_COST
                 except Exception:
                     sec_co_cost += SHIFT_HRS * SEC_COST
             elif prev_thk != thk:
