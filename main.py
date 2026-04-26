@@ -142,9 +142,156 @@ def print_results(mill, result, callback):
     )
     print(f"  HV gain    : {improvement:.1f}%")
 
+def build_schedule(perm, camps, mill, co):
+    from evaluator import (SHIFT_HRS, THK_CO_HRS, SEC_COST,
+                           get_sec_time, get_thk_cost,
+                           compute_changeover_clock, advance_clock)
+    from data_loader import MILL_CAPACITY
+
+    cap      = MILL_CAPACITY[mill]
+    schedule = []
+    clock    = 0.0
+    prev_sec = prev_thk = None
+
+    for pos, idx in enumerate(perm):
+        c   = camps.iloc[int(idx)]
+        sec = c['section']
+        thk = c['thickness']
+        qty = float(c['qty'])
+        due = float(c['due'])
+
+        co_type     = 'None'
+        co_hrs      = 0.0
+        co_hrs_lost = 0.0
+        co_cost     = 0.0
+
+        if prev_sec is not None:
+            if prev_sec != sec:
+                co_type  = 'Section'
+                hrs      = get_sec_time(co, prev_sec, sec)
+                if hrs is not None:
+                    new_clock, lost = compute_changeover_clock(clock, hrs)
+                    co_hrs      = hrs
+                    co_hrs_lost = lost
+                    co_cost     = SEC_COST
+                    clock       = new_clock
+            elif prev_thk != thk:
+                thk_c = get_thk_cost(co, prev_thk, thk, mill)
+                if thk_c is not None and thk_c > 0:
+                    co_type = 'Thickness'
+                    co_hrs  = THK_CO_HRS
+                    co_cost = thk_c
+                    clock  += THK_CO_HRS
+
+        start_day    = clock / SHIFT_HRS
+        roll_hrs     = (qty / cap) * SHIFT_HRS
+        new_clock, _ = advance_clock(clock, roll_hrs)
+        clock        = new_clock
+        finish_day   = clock / SHIFT_HRS
+
+        late_days  = max(0.0, finish_day - due)
+        early_days = max(0.0, due - finish_day)
+
+        schedule.append({
+            'pos'        : pos + 1,
+            'section'    : sec,
+            'thickness'  : int(thk),
+            'qty'        : round(qty, 2),
+            'due_day'    : int(due),
+            'start_day'  : round(start_day, 3),
+            'finish_day' : round(finish_day, 3),
+            'co_type'    : co_type,
+            'co_hrs'     : co_hrs,
+            'co_hrs_lost': co_hrs_lost,
+            'co_cost'    : co_cost,
+            'late_days'  : round(late_days, 3),
+            'late_mt'    : round(qty * late_days, 2),
+            'early_days' : round(early_days, 3),
+            'storage_mt' : round(qty * early_days, 2),
+        })
+
+        prev_sec = sec
+        prev_thk = thk
+
+    return schedule
 
 # ── Warm start save/load ──────────────────────────────────
 
+def save_results_json(mills, results, callbacks, camps_dict, co):
+    import json
+
+    output = {}
+
+    for mill in mills:
+        mill_key = mill.lower()
+        result   = results[mill]
+        callback = callbacks[mill]
+        camps    = camps_dict[mill]
+
+        if result is None or result.F is None or len(result.F) == 0:
+            output[mill_key] = None
+            continue
+
+        F = result.F
+        X = result.X
+
+        solutions = []
+
+        # Best per objective
+        best_indices = pick_best_per_objective(F)
+        for obj_i, sol_i in enumerate(best_indices):
+            perm       = X[sol_i]
+            schedule   = build_schedule(perm, camps, mill, co)
+            objectives = {
+                label: round(F[sol_i, j] * OBJ_DENOMS[j], 2)
+                for j, label in enumerate(OBJ_LABELS)
+            }
+            solutions.append({
+                'label'     : f'Best {OBJ_LABELS[obj_i]}',
+                'index'     : int(sol_i),
+                'objectives': objectives,
+                'schedule'  : schedule
+            })
+
+        # Balanced solution
+        bal_i      = pick_balanced(F)
+        perm       = X[bal_i]
+        schedule   = build_schedule(perm, camps, mill, co)
+        objectives = {
+            label: round(F[bal_i, j] * OBJ_DENOMS[j], 2)
+            for j, label in enumerate(OBJ_LABELS)
+        }
+        solutions.append({
+            'label'     : 'Balanced (TOPSIS)',
+            'index'     : int(bal_i),
+            'objectives': objectives,
+            'schedule'  : schedule
+        })
+
+        # Actual plan campaigns for comparison tab
+        actual_camps = []
+        for _, row in camps.iterrows():
+            actual_camps.append({
+                'section'  : row['section'],
+                'thickness': int(row['thickness']),
+                'qty'      : round(float(row['qty']), 2),
+                'maxDue'   : int(row['due'])
+            })
+
+        output[mill_key] = {
+            'solutions'   : solutions,
+            'actual_camps': actual_camps,
+            'convergence' : {
+                'generations': callback.gen_numbers,
+                'hypervolume': [round(h, 6) for h in callback.hypervolume],
+                'diversity'  : [round(d, 4) for d in callback.diversity],
+            }
+        }
+
+    with open('results.json', 'w') as f:
+        json.dump(output, f, indent=2)
+    print("\nResults saved → results.json")
+    
 def load_warm_perm(path):
     if path and os.path.exists(path):
         perm = np.load(path)
@@ -277,6 +424,14 @@ def main():
         for mill in ['SM', 'LM']:
             if results[mill] is not None:
                 save_warm_perm(results[mill], mill, pick_balanced)
+
+    save_results_json(
+        mills      = ['SM', 'LM'],
+        results    = results,
+        callbacks  = callbacks,
+        camps_dict = {'SM': camps_sm, 'LM': camps_lm},
+        co         = co
+    )
 
     print(f"\nTotal wall time: {time.time() - t_total:.1f}s")
     print("Done.\n")
