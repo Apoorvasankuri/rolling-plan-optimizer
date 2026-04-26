@@ -1,7 +1,7 @@
 import json
 
 # ── Load results ──────────────────────────────────────────
-with open('outputs/results.json', 'r') as f:
+with open('results.json', 'r') as f:
     results = json.load(f)
 
 results_js = json.dumps(results)
@@ -645,7 +645,7 @@ window.onload=function(){
 </body>
 </html>'''
 
-with open('outputs/results.html', 'w', encoding='utf-8') as f:
+with open('results.html', 'w', encoding='utf-8') as f:
     f.write(html)
 
 print("Done. Open outputs/results.html in your browser.")
