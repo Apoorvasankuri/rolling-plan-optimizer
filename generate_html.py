@@ -14,7 +14,7 @@ html = '''<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SteelOpt — NSGA-III Rolling Schedule Optimizer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,600;0,700;1,300&display=swap');
 :root{--bg:#0a0c10;--bg2:#111318;--bg3:#181c24;--border:#252a35;--border2:#2e3545;--text:#e2e8f0;--text2:#8892a4;--text3:#5a6478;--accent:#00d4ff;--accent2:#0096ff;--green:#00e5a0;--red:#ff4466;--yellow:#ffd166;--orange:#ff8c42;--purple:#b06aff;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;}
@@ -389,10 +389,10 @@ function renderParams(){
   const params=[
     {label:'SM Campaigns',val:r.sm.solutions[0].schedule.length},
     {label:'LM Campaigns',val:r.lm.solutions[0].schedule.length},
-    {label:'SM Pareto Solutions',val:r.sm.pareto_f.length},
-    {label:'LM Pareto Solutions',val:r.lm.pareto_f.length},
-    {label:'Objectives',val:r.obj_labels.length},
-    {label:'Solutions per Mill',val:r.sol_labels.length},
+    {label:'SM Pareto Solutions',val:r.sm.solutions.length},
+    {label:'LM Pareto Solutions',val:r.lm.solutions.length},
+    {label:'Objectives',val:r.obj_labels?r.obj_labels.length:6},
+    {label:'Solutions per Mill',val:r.sm.solutions.length},
     {label:'SM Capacity (MT/day)',val:140},
     {label:'LM Capacity (MT/day)',val:250},
   ];
@@ -406,13 +406,15 @@ function renderResults(){
   const container=document.getElementById('results-content');
   container.innerHTML=`
     <div class="section-title">◈ Pareto Fronts</div>
-    <div class="pareto-grid">
-      <div class="chart-wrap"><div class="chart-title">SM — Late Delivery vs Sec CO Cost</div><canvas id="p-sm-1" height="220"></canvas></div>
-      <div class="chart-wrap"><div class="chart-title">LM — Late Delivery vs Sec CO Cost</div><canvas id="p-lm-1" height="220"></canvas></div>
-      <div class="chart-wrap"><div class="chart-title">SM — Late Delivery vs Thk CO Cost</div><canvas id="p-sm-2" height="220"></canvas></div>
-      <div class="chart-wrap"><div class="chart-title">LM — Late Delivery vs Thk CO Cost</div><canvas id="p-lm-2" height="220"></canvas></div>
-      <div class="chart-wrap"><div class="chart-title">SM — Late Delivery vs Storage (MT×days)</div><canvas id="p-sm-3" height="220"></canvas></div>
-      <div class="chart-wrap"><div class="chart-title">LM — Late Delivery vs Storage (MT×days)</div><canvas id="p-lm-3" height="220"></canvas></div>
+    <div class="chart-wrap">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+        <button onclick="setPCPMill('sm')" id="pcp-btn-sm" style="font-size:12px;padding:5px 14px;border-radius:20px;border:1px solid #00d4ff;background:#00d4ff;color:#000;cursor:pointer;font-weight:600;">SM mill</button>
+        <button onclick="setPCPMill('lm')" id="pcp-btn-lm" style="font-size:12px;padding:5px 14px;border-radius:20px;border:1px solid #252a35;background:transparent;color:#8892a4;cursor:pointer;">LM mill</button>
+        <span style="font-size:11px;color:#5a6478;">Click a solution chip to highlight it · Lower is better on every axis</span>
+      </div>
+      <div id="pcp-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;"></div>
+      <canvas id="pcp-canvas" height="300" style="display:block;width:100%;border-radius:6px;"></canvas>
+      <p style="font-size:11px;color:#5a6478;margin-top:8px;text-align:center;">Each line = one solution · Each vertical axis = one objective · Click any line or chip to focus</p>
     </div>
     <div class="divider"></div>
     <div class="section-title">⚙ Small Mill (SM) — Select a Solution</div>
@@ -434,24 +436,142 @@ function renderResults(){
       <div id="plan-sm"></div>
       <div id="plan-lm" style="display:none"></div>
     </div>`;
-  setTimeout(()=>{renderParetoCharts(r);renderCards('sm',r.sm.solutions,'sm-cards');renderCards('lm',r.lm.solutions,'lm-cards');},50);
+  setTimeout(()=>{renderParetoCharts(r);renderCards('sm',r.sm.solutions,'sm-cards');renderCards('lm',r.lm.solutions,'lm-cards');pcpMill='sm';},50);
+}
+
+const PCP_DIMS=[
+  {key:'late', label:'Late delivery', unit:'MT·days', color:'#ff4466'},
+  {key:'sct',  label:'Sec CO time',   unit:'hrs',     color:'#00d4ff'},
+  {key:'scc',  label:'Sec CO cost',   unit:'Rs',      color:'#00e5a0'},
+  {key:'thk',  label:'Thk CO cost',   unit:'Rs',      color:'#ffd166'},
+  {key:'stmt', label:'Storage',       unit:'MT·days', color:'#b06aff'},
+  {key:'stday',label:'Storage days',  unit:'days',    color:'#ff8c42'},
+];
+const PCP_COLORS=['#ff4466','#00d4ff','#00e5a0','#ffd166','#b06aff','#ff8c42','#0096ff','#ff6b9d','#40e0d0','#ffaa00'];
+let pcpMill='sm', pcpActive=0;
+
+function setPCPMill(mill){
+  pcpMill=mill;
+  pcpActive=0;
+  document.getElementById('pcp-btn-sm').style.background=mill==='sm'?'#00d4ff':'transparent';
+  document.getElementById('pcp-btn-sm').style.color=mill==='sm'?'#000':'#8892a4';
+  document.getElementById('pcp-btn-sm').style.borderColor=mill==='sm'?'#00d4ff':'#252a35';
+  document.getElementById('pcp-btn-lm').style.background=mill==='lm'?'#00d4ff':'transparent';
+  document.getElementById('pcp-btn-lm').style.color=mill==='lm'?'#000':'#8892a4';
+  document.getElementById('pcp-btn-lm').style.borderColor=mill==='lm'?'#00d4ff':'#252a35';
+  renderParetoCharts(STATE.results);
 }
 
 function renderParetoCharts(r){
-  const pairs=[[3,1],[3,2],[3,4]];
-  ['sm','lm'].forEach(mill=>{
-    const F=r[mill].pareto_f;
-    pairs.forEach((pair,i)=>{
-      const id=`p-${mill}-${i+1}`;
-      const el=document.getElementById(id); if(!el) return;
-      if(charts[id]) charts[id].destroy();
-      charts[id]=new Chart(el,{type:'scatter',
-        data:{datasets:[{label:'Pareto Front',data:F.map(f=>({x:+f[pair[0]].toFixed(1),y:+f[pair[1]].toFixed(0)})),backgroundColor:'rgba(0,212,255,0.5)',borderColor:'rgba(0,212,255,0.8)',pointRadius:5}]},
-        options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Late:${c.raw.x.toFixed(0)} | ${OBJ_LABELS[pair[1]]}:${c.raw.y.toFixed(0)}`}}},
-          scales:{x:{title:{display:true,text:OBJ_LABELS[pair[0]],color:'#8892a4'},grid:{color:'#252a35'},ticks:{color:'#8892a4'}},
-                  y:{title:{display:true,text:OBJ_LABELS[pair[1]],color:'#8892a4'},grid:{color:'#252a35'},ticks:{color:'#8892a4'}}}}});
+  const data=r[pcpMill].solutions.map(sol=>({
+    late: sol.objectives['Late (MT\u00b7days)'],
+    sct:  sol.objectives['Sec CO time (hrs)'],
+    scc:  sol.objectives['Sec CO cost (Rs)'],
+    thk:  sol.objectives['Thk CO cost (Rs)'],
+    stmt: sol.objectives['Storage (MT\u00b7days)'],
+    stday:sol.objectives['Storage (days)'],
+    lbl:  sol.label
+  }));
+
+  const cv=document.getElementById('pcp-canvas');
+  if(!cv) return;
+  const ctx=cv.getContext('2d');
+  const W=cv.offsetWidth||900, H=300;
+  cv.width=W; cv.height=H;
+  ctx.clearRect(0,0,W,H);
+
+  const ML=50,MR=20,MT=65,MB=35;
+  const IW=W-ML-MR, IH=H-MT-MB;
+  const nDims=PCP_DIMS.length;
+
+  function xOf(i){return ML+i*(IW/(nDims-1));}
+  function yOf(dimIdx,val){
+    const vals=data.map(d=>d[PCP_DIMS[dimIdx].key]);
+    const mn=Math.min(...vals),mx=Math.max(...vals),r=mx-mn||1;
+    return MT+IH-((val-mn)/r)*IH;
+  }
+  function fmt(v,k){
+    if(k==='scc'||k==='thk') return v>=1000?(v/1000).toFixed(0)+'k':''+v;
+    if(v>=10000) return (v/1000).toFixed(0)+'k';
+    return Number.isInteger(v)?''+v:v.toFixed(1);
+  }
+
+  // background lines
+  data.forEach((d,i)=>{
+    if(i===pcpActive) return;
+    ctx.beginPath();
+    PCP_DIMS.forEach((dim,j)=>{
+      const x=xOf(j),y=yOf(j,d[dim.key]);
+      j===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
     });
+    ctx.strokeStyle=PCP_COLORS[i%PCP_COLORS.length]+'25';
+    ctx.lineWidth=1.5; ctx.stroke();
   });
+
+  // highlighted line
+  const hi=data[pcpActive];
+  ctx.beginPath();
+  PCP_DIMS.forEach((dim,j)=>{
+    const x=xOf(j),y=yOf(j,hi[dim.key]);
+    j===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle=PCP_COLORS[pcpActive%PCP_COLORS.length];
+  ctx.lineWidth=3; ctx.lineJoin='round'; ctx.stroke();
+
+  // axes + labels + dots + values
+  PCP_DIMS.forEach((dim,i)=>{
+    const x=xOf(i);
+    const vals=data.map(d=>d[dim.key]);
+    const mn=Math.min(...vals),mx=Math.max(...vals);
+
+    ctx.beginPath();ctx.moveTo(x,MT);ctx.lineTo(x,MT+IH);
+    ctx.strokeStyle='#252a35';ctx.lineWidth=1.5;ctx.stroke();
+
+    ctx.fillStyle=dim.color;ctx.font='bold 11px IBM Plex Mono,monospace';ctx.textAlign='center';
+    ctx.fillText(dim.label,x,MT-30);
+    ctx.fillStyle='#5a6478';ctx.font='10px IBM Plex Mono,monospace';
+    ctx.fillText('('+dim.unit+')',x,MT-16);
+
+    ctx.fillStyle='#5a6478';ctx.font='9px IBM Plex Mono,monospace';ctx.textAlign='right';
+    ctx.fillText(fmt(mn,dim.key),x-8,MT+IH+4);
+    ctx.fillText(fmt(mx,dim.key),x-8,MT+4);
+
+    const hy=yOf(i,hi[dim.key]);
+    ctx.beginPath();ctx.arc(x,hy,7,0,Math.PI*2);
+    ctx.fillStyle=dim.color;ctx.fill();
+    ctx.strokeStyle='#0a0c10';ctx.lineWidth=2;ctx.stroke();
+
+    ctx.fillStyle=dim.color;ctx.font='bold 10px IBM Plex Mono,monospace';ctx.textAlign='center';
+    ctx.fillText(fmt(hi[dim.key],dim.key),x,hy-12);
+  });
+
+  ctx.textAlign='left';
+
+  // chips
+  const chips=document.getElementById('pcp-chips');
+  if(!chips) return;
+  chips.innerHTML='';
+  data.forEach((d,i)=>{
+    const chip=document.createElement('button');
+    chip.textContent=d.lbl;
+    chip.style.cssText=`font-size:11px;padding:4px 12px;border-radius:20px;cursor:pointer;border:1.5px solid ${PCP_COLORS[i%PCP_COLORS.length]};background:${i===pcpActive?PCP_COLORS[i%PCP_COLORS.length]:'transparent'};color:${i===pcpActive?'#000':PCP_COLORS[i%PCP_COLORS.length]};font-family:IBM Plex Mono,monospace;`;
+    chip.onclick=()=>{pcpActive=i;renderParetoCharts(r);};
+    chips.appendChild(chip);
+  });
+
+  // click on canvas line
+  cv.onclick=e=>{
+    const rect=cv.getBoundingClientRect();
+    const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+    let best=null,bestD=Infinity;
+    data.forEach((d,i)=>{
+      PCP_DIMS.forEach((dim,j)=>{
+        const dist=Math.hypot(mx-xOf(j),my-yOf(j,d[dim.key]));
+        if(dist<bestD){bestD=dist;best=i;}
+      });
+    });
+    if(best!==null&&bestD<20){pcpActive=best;renderParetoCharts(r);}
+  };
 }
 
 function renderCards(mill,solutions,containerId){
