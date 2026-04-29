@@ -29,9 +29,7 @@ from data_loader import (load_loi, load_changeover, build_campaigns,
 from runner import run_nsga3, pick_best_per_objective, pick_balanced
 
 
-# ── Objective labels ──────────────────────────────────────
 OBJ_LABELS = [
-    "Sec CO time (hrs)",
     "Sec CO cost (Rs)",
     "Thk CO cost (Rs)",
     "Late (MT·days)",
@@ -41,7 +39,6 @@ OBJ_LABELS = [
 
 # ── Normalisation denominators (must match evaluator.py) ──
 OBJ_DENOMS = [
-    400.0,
     10_000_000.0,
     3_000_000.0,
     60_000.0,

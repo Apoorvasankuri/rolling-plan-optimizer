@@ -14,7 +14,7 @@ class RollingPlanProblem(ElementwiseProblem):
 
         super().__init__(
             n_var        = self.n_camps,
-            n_obj        = 6,
+            n_obj        = 5,
             n_ieq_constr = 0,
             xl           = 0,
             xu           = self.n_camps - 1,
