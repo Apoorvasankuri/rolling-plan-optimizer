@@ -66,23 +66,17 @@ def advance_clock(clock, hours_needed):
         return clock + hours_needed, 0.0
 
 def compute_changeover_clock(clock, co_hrs):
-    """
-    Apply section/thickness changeover to clock.
-    Returns (new_clock, shift_hrs_lost).
-
-    Rule:
-    - remaining = SHIFT_HRS - (clock % SHIFT_HRS)
-    - hrs_lost_in_shift = min(co_hrs, remaining)
-    - remaining changeover spills overnight for free
-    - next campaign starts at beginning of next shift
-    """
     shift_position = clock % SHIFT_HRS
     remaining      = SHIFT_HRS - shift_position
 
-    hrs_lost = min(co_hrs, remaining)
-
-    # Next campaign starts at beginning of next shift
-    new_clock = (np.floor(clock / SHIFT_HRS) + 1) * SHIFT_HRS
+    if co_hrs <= remaining:
+        # Fits in current shift — productive hours lost
+        hrs_lost  = co_hrs
+        new_clock = clock + co_hrs
+    else:
+        # Doesn't fit — done post-shift, 0 hours lost
+        hrs_lost  = 0.0
+        new_clock = (np.floor(clock / SHIFT_HRS) + 1) * SHIFT_HRS
 
     return new_clock, hrs_lost
 

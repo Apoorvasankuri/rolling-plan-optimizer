@@ -173,8 +173,8 @@ class ConvergenceCallback(Callback):
             f"HV: {hv:.4f}{hv_change:<12} | "
             f"Diversity: {diversity:.2f} | "
             f"MutRate: {mut_str} | "
-            f"BestCost: {best[1] * 5_000_000:>12.0f} | "
-            f"BestLate: {best[3] * 500_000:>10.0f}"
+            f"BestCost: {best[0] * 10_000_000:>12.0f} | "
+            f"BestLate: {best[2] * 60_000:>10.0f}"
         )
 
     # ── Summary after run ─────────────────────────────────
@@ -193,7 +193,6 @@ class ConvergenceCallback(Callback):
         print(f"  Final diversity         : {self.diversity[-1]:.2f}")
         final_best = self.best_per_obj[-1]
         labels = [
-            "Sec CO time (hrs)",
             "Sec CO cost (Rs)",
             "Thk CO cost (Rs)",
             "Late (MT·days)",

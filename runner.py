@@ -33,8 +33,8 @@ def run_nsga3(camps, cap, mill, co,
     # Layer 2 — sparse, ensures no region is ignored
     ref_dirs = get_reference_directions(
         "multi-layer",
-        get_reference_directions("das-dennis", 6, n_partitions=6),
-        get_reference_directions("das-dennis", 6, n_partitions=3),
+        get_reference_directions("das-dennis", 5, n_partitions=6),
+        get_reference_directions("das-dennis", 5, n_partitions=3),
     )
 
     # Population must be >= number of reference directions
@@ -138,8 +138,8 @@ def pick_balanced(F):
         4: Storage (MT·days)
         5: Storage (days)
     """
-    weights = np.array([0.15, 0.10, 0.10, 0.40, 0.15, 0.10])
-    # weights sum to 1.0 — late delivery gets 40%, storage days only 10%
+    weights = np.array([0.20, 0.15, 0.40, 0.15, 0.10])
+    # weights sum to 1.0 — late delivery gets 40%, sec CO cost 20%
 
     mins  = F.min(axis=0)
     maxs  = F.max(axis=0)
