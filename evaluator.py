@@ -11,7 +11,7 @@ THK_CO_HRS    = 0.5
 # ── Normalisation denominators ────────────────────────────
 # Set to expected worst-case value for each objective
 # Objectives will be returned in range [0, ~1]
-NORM_SEC_CO_TIME     = 400.0
+CONTRIBUTION_PER_HR  = 62_866.0
 NORM_SEC_CO_COST     = 10_000_000.0
 NORM_THK_CO_COST     = 3_000_000.0
 NORM_LATE_MT_DAYS    = 60_000.0
