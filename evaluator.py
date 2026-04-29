@@ -57,13 +57,13 @@ def advance_clock(clock, hours_needed):
     remaining      = SHIFT_HRS - shift_position
 
     if hours_needed <= remaining:
-        # Fits in current shift — no stretch needed
+        # Fits in current shift
         return clock + hours_needed, 0.0
-    elif hours_needed <= STRETCH_MAX:
-        return clock + hours_needed, 0.0  # roll through, no time wasted
     else:
-        # Spans multiple shifts
-        return clock + hours_needed, 0.0
+        # Spills into next day — continue from start of next shift
+        hours_carried = hours_needed - remaining
+        new_clock     = (np.floor(clock / SHIFT_HRS) + 1) * SHIFT_HRS + hours_carried
+        return new_clock, 0.0
 
 def compute_changeover_clock(clock, co_hrs):
     shift_position = clock % SHIFT_HRS

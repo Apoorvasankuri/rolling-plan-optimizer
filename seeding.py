@@ -238,6 +238,17 @@ def build_seeded_population(n_camps, pop_size, camps, co,
     except Exception as e:
         print(f"[seeding] warm_start failed: {e}")
 
+    # 5. Actual plan
+    try:
+        if actual_perm is not None:
+            perm = np.array(actual_perm, dtype=int)
+            if set(perm.tolist()) == set(range(n_camps)):
+                base_seeds.append(('actual_plan', perm))
+            else:
+                print(f"[seeding] actual_perm is not a valid permutation, skipping.")
+    except Exception as e:
+        print(f"[seeding] actual_plan failed: {e}")
+
     if base_seeds:
         print(f"[seeding] {len(base_seeds)} heuristic seeds generated: "
               f"{[name for name, _ in base_seeds]}")
@@ -391,7 +402,7 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
                            NORM_STORAGE_MT_DAYS, NORM_STORAGE_DAYS)
 
     denoms = np.array([
-        NORM_SEC_CO_TIME, NORM_SEC_CO_COST, NORM_THK_CO_COST,
+        NORM_SEC_CO_COST, NORM_THK_CO_COST,
         NORM_LATE_MT_DAYS, NORM_STORAGE_MT_DAYS, NORM_STORAGE_DAYS
     ])
 

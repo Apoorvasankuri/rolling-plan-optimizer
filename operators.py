@@ -24,12 +24,14 @@ class PermutationSampling(Sampling):
     """
 
     def __init__(self, camps=None, co=None,
-                 seed_fraction=0.20, last_best_perm=None):
+                 seed_fraction=0.20, last_best_perm=None,
+                 actual_perm=None):
         super().__init__()
         self.camps          = camps
         self.co             = co
         self.seed_fraction  = seed_fraction
         self.last_best_perm = last_best_perm
+        self.actual_perm    = actual_perm
 
     def _do(self, problem, n_samples, **kwargs):
         # If camps/co provided use seeded init, else fall back to random
@@ -40,7 +42,8 @@ class PermutationSampling(Sampling):
                 camps          = self.camps,
                 co             = self.co,
                 seed_fraction  = self.seed_fraction,
-                last_best_perm = self.last_best_perm
+                last_best_perm = self.last_best_perm,
+                actual_perm    = self.actual_perm
             )
         else:
             # Pure random fallback

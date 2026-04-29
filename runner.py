@@ -86,7 +86,8 @@ def run_nsga3(camps, cap, mill, co,
         camps          = camps,
         co             = co,
         seed_fraction  = 0.20,
-        last_best_perm = last_best_perm
+        last_best_perm = last_best_perm,
+        actual_perm    = actual_perm
     )
 
     algorithm = NSGA3(
