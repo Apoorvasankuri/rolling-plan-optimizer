@@ -93,21 +93,19 @@ def compute_changeover_clock(clock, co_hrs):
 
 def evaluate(perm, camps, cap, mill, co):
     """
-    Evaluates a permutation of campaigns and returns 6 objective values.
+    Evaluates a permutation of campaigns and returns 5 objective values.
 
     Objectives:
-        0: Section changeover time during shift (hrs lost in production)
-        1: Section changeover cost (Rs)
-        2: Thickness changeover cost (Rs)
-        3: Late delivery (MT x days late)
-        4: Inventory storage (MT x days finished before bucket)
-        5: Inventory storage days (sum of days early, unweighted)
+        0: Section changeover cost (Rs) — fixed cost + opportunity cost of hrs lost
+        1: Thickness changeover cost (Rs)
+        2: Late delivery (MT x days late)
+        3: Inventory storage (MT x days finished before bucket)
+        4: Inventory storage days (sum of days early, unweighted)
 
-    Returns np.array of 6 floats.
+    Returns np.array of 5 floats.
     Returns a very large penalty array if the permutation is infeasible
     (forbidden thickness changeover encountered).
     """
-    sec_co_time     = 0.0
     sec_co_cost     = 0.0
     thk_co_cost     = 0.0
     late_mt_days    = 0.0
@@ -118,7 +116,7 @@ def evaluate(perm, camps, cap, mill, co):
     prev_sec = None
     prev_thk = None
 
-    PENALTY = np.array([1e9, 1e9, 1e9, 1e9, 1e9, 1e9], dtype=float)
+    PENALTY = np.array([1e9, 1e9, 1e9, 1e9, 1e9], dtype=float)
 
     for pos in range(len(perm)):
         idx = int(perm[pos])
@@ -139,8 +137,7 @@ def evaluate(perm, camps, cap, mill, co):
                     return PENALTY   # impossible — penalise
                 new_clock, hrs_lost = compute_changeover_clock(clock, co_hrs)
                 clock        = new_clock
-                sec_co_time += hrs_lost
-                sec_co_cost += SEC_COST  # fixed cost per section changeover
+                sec_co_cost += SEC_COST + (hrs_lost * CONTRIBUTION_PER_HR)
 
             elif prev_thk != thk:
                 thk_c = get_thk_cost(co, prev_thk, thk, mill)
@@ -171,7 +168,6 @@ def evaluate(perm, camps, cap, mill, co):
         prev_thk = thk
 
     return np.array([
-    sec_co_time     / NORM_SEC_CO_TIME,
     sec_co_cost     / NORM_SEC_CO_COST,
     thk_co_cost     / NORM_THK_CO_COST,
     late_mt_days    / NORM_LATE_MT_DAYS,
