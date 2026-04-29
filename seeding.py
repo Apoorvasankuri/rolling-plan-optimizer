@@ -363,8 +363,8 @@ def compute_hv_ref_point(camps, cap, mill, co, margin=0.15):
 
     if len(all_F) == 0:
         print(f"[{mill}] WARNING: all sequences infeasible, "
-              f"using fallback ref point [2.0 x 6]")
-        return np.ones(6) * 2.0
+              f"using fallback ref point [2.0 x 5]")
+        return np.ones(5) * 2.0
 
     all_F     = np.array(all_F)
     worst     = all_F.max(axis=0)
@@ -373,7 +373,7 @@ def compute_hv_ref_point(camps, cap, mill, co, margin=0.15):
     print(f"[{mill}] Reference point from "
           f"{len(all_F)} sequences ({n} NN + 50 random):")
     labels = [
-        "Sec CO time (norm)", "Sec CO cost (norm)",
+        "Sec CO cost (norm)",
         "Thk CO cost (norm)", "Late (norm)",
         "Storage MT (norm)",  "Storage days (norm)"
     ]
@@ -395,11 +395,12 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
     Returns ref_point = actual_F * (1 + margin)
     """
     from evaluator import (SHIFT_HRS, THK_CO_HRS, SEC_COST,
+                           CONTRIBUTION_PER_HR,
                            get_sec_time, get_thk_cost,
                            compute_changeover_clock, advance_clock,
-                           NORM_SEC_CO_TIME, NORM_SEC_CO_COST,
-                           NORM_THK_CO_COST, NORM_LATE_MT_DAYS,
-                           NORM_STORAGE_MT_DAYS, NORM_STORAGE_DAYS)
+                           NORM_SEC_CO_COST, NORM_THK_CO_COST,
+                           NORM_LATE_MT_DAYS, NORM_STORAGE_MT_DAYS,
+                           NORM_STORAGE_DAYS)
 
     denoms = np.array([
         NORM_SEC_CO_COST, NORM_THK_CO_COST,
@@ -426,11 +427,7 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
                     n_forbidden += 1
                 new_clock, hrs_lost = compute_changeover_clock(clock, co_hrs)
                 clock        = new_clock
-                sec_co_time += hrs_lost
-                try:
-                    sec_co_cost += SEC_COST
-                except Exception:
-                    sec_co_cost += SHIFT_HRS * SEC_COST
+                sec_co_cost += SEC_COST + (hrs_lost * CONTRIBUTION_PER_HR)
             elif prev_thk != thk:
                 thk_c = get_thk_cost(co, prev_thk, thk, mill)
                 if thk_c is None:
@@ -455,13 +452,13 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
 
         prev_sec = sec; prev_thk = thk
 
-    raw = np.array([sec_co_time, sec_co_cost, thk_co_cost,
+    raw = np.array([sec_co_cost, thk_co_cost,
                     late_mt_days, storage_mt_days, storage_days])
     actual_F  = raw / denoms
     ref_point = actual_F * (1.0 + margin)
 
     labels = [
-        "Sec CO time (norm)", "Sec CO cost (norm)",
+        "Sec CO cost (norm)",
         "Thk CO cost (norm)", "Late (norm)",
         "Storage MT (norm)",  "Storage days (norm)"
     ]
