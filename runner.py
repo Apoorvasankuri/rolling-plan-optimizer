@@ -121,7 +121,7 @@ def run_nsga3(camps, cap, mill, co,
 def pick_best_per_objective(F):
     """
     Returns indices of best solution per objective.
-    One index per objective (6 total).
+    One index per objective (5 total).
     """
     return [int(np.argmin(F[:, i])) for i in range(F.shape[1])]
 
