@@ -4,6 +4,9 @@ from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 
+from multiprocessing.pool import ThreadPool
+from pymoo.core.problem import StarmapParallelization
+
 from problem import RollingPlanProblem
 from operators import PermutationSampling, OrderCrossover, SwapMutation
 from convergence import ConvergenceCallback, MAX_GEN
@@ -26,7 +29,9 @@ def run_nsga3(camps, cap, mill, co,
     last_best_perm : array or None — best perm from previous cycle
                                      (enables warm start seeding)
     """
-    problem = RollingPlanProblem(camps, cap, mill, co)
+    pool    = ThreadPool(8)
+    runner  = StarmapParallelization(pool.starmap)
+    problem = RollingPlanProblem(camps, cap, mill, co, elementwise_runner=runner)
 
     # Two-layer reference directions
     # Layer 1 — dense, more reference points overall
@@ -67,7 +72,7 @@ def run_nsga3(camps, cap, mill, co,
         )
         ref_point = np.maximum(nn_ref, actual_ref)
         print(f"[{mill}] Final ref point (max of NN and actual plan):")
-        labels = ["sec_co_time", "sec_co_cost", "thk_co_cost",
+        labels = ["sec_co_cost", "thk_co_cost",
                   "late", "storage_mt", "storage_days"]
         for l, v in zip(labels, ref_point):
             print(f"       {l:<20}: {v:.4f}")
@@ -145,7 +150,7 @@ def pick_balanced(F):
     mins  = F.min(axis=0)
     maxs  = F.max(axis=0)
     denom = np.where(maxs > mins, maxs - mins, 1.0)
-    norm  = (F - mins) / denom          # shape (n_solutions, 6), range [0,1]
+    norm  = (F - mins) / denom          # shape (n_solutions, 5), range [0,1]
 
     weighted = norm * weights           # scale each objective by its priority
 
