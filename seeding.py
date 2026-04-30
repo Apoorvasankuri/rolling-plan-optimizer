@@ -407,7 +407,7 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
         NORM_LATE_MT_DAYS, NORM_STORAGE_MT_DAYS, NORM_STORAGE_DAYS
     ])
 
-    sec_co_time = sec_co_cost = thk_co_cost = 0.0
+    sec_co_cost = thk_co_cost = 0.0
     late_mt_days = storage_mt_days = storage_days = 0.0
     clock = 0.0
     prev_sec = prev_thk = None
