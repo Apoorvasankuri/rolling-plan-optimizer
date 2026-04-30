@@ -5,7 +5,7 @@ from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 
 from multiprocessing.pool import ThreadPool
-from pymoo.core.parallel import StarmapParallelization
+from pymoo.parallelization.starmap import StarmapParallelization
 
 from problem import RollingPlanProblem
 from operators import PermutationSampling, OrderCrossover, SwapMutation
