@@ -22,7 +22,7 @@ class ConvergenceCallback(Callback):
     """
 
     # FIX 1: corrected __init__ indentation — all assignments now inside method
-    def __init__(self, ref_point=None, window=WINDOW, hv_tol=HV_TOL):
+    def __init__(self, ref_point=None, window=WINDOW, hv_tol=HV_TOL, scales=None):
         super().__init__()
         if ref_point is None:
             raise ValueError(
@@ -32,6 +32,7 @@ class ConvergenceCallback(Callback):
         self.ref_point = ref_point
         self.window    = window
         self.hv_tol    = hv_tol
+        self.scales    = scales if scales is not None else np.ones(6)
 
         # History lists — one entry per generation
         self.hypervolume   = []
@@ -50,7 +51,7 @@ class ConvergenceCallback(Callback):
 
         # ── Hypervolume ───────────────────────────────────
         # FIX 5: exclude solutions outside ref point instead of clipping
-        feasible = F[np.all(F < 1e8, axis=1)]
+        feasible = F[np.all(F < 1e7, axis=1)]
         if len(feasible) == 0:
             hv = 0.0
         else:
@@ -173,8 +174,9 @@ class ConvergenceCallback(Callback):
             f"HV: {hv:.4f}{hv_change:<12} | "
             f"Diversity: {diversity:.2f} | "
             f"MutRate: {mut_str} | "
-            f"BestCost: {best[0] * 10_000_000:>12.0f} | "
-            f"BestLate: {best[2] * 60_000:>10.0f}"
+            f"BestCost: {best[0] * self.scales[0]:>12.0f} | "
+            f"BestLate: {best[2] * self.scales[2]:>10.0f} | "
+            f"BestIdle: {best[5] * self.scales[5]:>8.1f}h"
         )
 
     # ── Summary after run ─────────────────────────────────
@@ -197,9 +199,11 @@ class ConvergenceCallback(Callback):
             "Thk CO cost (Rs)",
             "Late (MT·days)",
             "Storage (MT·days)",
-            "Storage (days)"
+            "Storage (days)",
+            "Idle hours"
         ]
         print("\n  Best values on Pareto front:")
         for i, (label, val) in enumerate(zip(labels, final_best)):
-            print(f"    {label:<22}: {val:>15.2f}")
+            raw = val * self.scales[i]
+            print(f"    {label:<22}: {raw:>15.2f}")
         print("="*60)
