@@ -285,7 +285,7 @@ function renderPCP(){
   const W = cv.parentElement.offsetWidth || 900, H = 340;
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#111318';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
 
   const nDims = OBJ_LABELS.length;
@@ -318,7 +318,7 @@ function renderPCP(){
       const x = xOf(j), y = yOf(j, sol.objectives[lbl]);
       j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
-    ctx.strokeStyle = OBJ_COLORS[si % OBJ_COLORS.length] + '28';
+    ctx.strokeStyle = OBJ_COLORS[si % OBJ_COLORS.length] + '55';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   });
@@ -344,7 +344,7 @@ function renderPCP(){
     const color = OBJ_COLORS[i];
 
     ctx.beginPath(); ctx.moveTo(x, MT); ctx.lineTo(x, MT + IH);
-    ctx.strokeStyle = '#2e3545'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = '#cccccc'; ctx.lineWidth = 1.5; ctx.stroke();
 
     const words = lbl.split(' ');
     let line1 = '', line2 = '';
@@ -358,7 +358,7 @@ function renderPCP(){
     ctx.fillText(line1, x, MT - (line2 ? 26 : 18));
     if(line2) ctx.fillText(line2, x, MT - 14);
 
-    ctx.fillStyle = '#5a6478';
+    ctx.fillStyle = '#888888';
     ctx.font = '8px IBM Plex Mono,monospace';
     const ta = i === 0 ? 'left' : i === nDims-1 ? 'right' : 'center';
     ctx.textAlign = ta;
@@ -370,7 +370,7 @@ function renderPCP(){
       const hy = yOf(i, hiSol.objectives[lbl]);
       ctx.beginPath(); ctx.arc(x, hy, 5, 0, Math.PI*2);
       ctx.fillStyle = color; ctx.fill();
-      ctx.strokeStyle = '#111318'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
 
       ctx.fillStyle = color;
       ctx.font = 'bold 9px IBM Plex Mono,monospace';
