@@ -10,34 +10,12 @@ THK_CO_HRS    = 0.5
 
 CONTRIBUTION_PER_HR  = 62_866.0
 
-# ── Pre-scaling constants ─────────────────────────────────
-# These are NOT importance weights. Their only job is to ensure
-# all 5 objectives enter NSGA-III at the same order of magnitude.
-#
-# When pymoo's hyperplane solve fails (which it will on this problem
-# because stor_mt and stor_d share an extreme point — r=0.52),
-# it falls back to nadir = worst_of_front. In that fallback,
-# perpendicular distances use nadir magnitudes directly.
-# These scales ensure all nadir values land in [4.5, 9.9]
-# so no objective dominates the distance calculation.
-#
-# Derived from: SCALE_i = observed_raw_max / 10
-# measured over 1000 random permutations on Jan-2026 data,
-# taking max(SM, LM) per objective and rounding up.
-SCALE_SEC_CO_COST     = 1_700_000.0
-SCALE_THK_CO_COST     =    80_500.0
-SCALE_LATE_MT_DAYS    =     4_900.0
-SCALE_STORAGE_MT_DAYS =       490.0
-SCALE_STORAGE_DAYS    =        30.0
+STRETCH_MAX_HRS = 6.0
 
-# Single source of truth — imported by main.py, seeding.py, convergence.py
-OBJ_SCALES = np.array([
-    SCALE_SEC_CO_COST,
-    SCALE_THK_CO_COST,
-    SCALE_LATE_MT_DAYS,
-    SCALE_STORAGE_MT_DAYS,
-    SCALE_STORAGE_DAYS,
-], dtype=float)
+# OBJ_SCALES is computed at runtime by compute_obj_scales() in runner.py
+# and passed into evaluate() as a parameter.
+# This array is the fallback only if scales are not yet available.
+OBJ_SCALES_FALLBACK = np.ones(6, dtype=float)
 
 # ── Changeover lookup helpers ─────────────────────────────
 
@@ -106,67 +84,102 @@ def compute_changeover_clock(clock, co_hrs):
 
 
 
-def evaluate(perm, camps, cap, mill, co):
+def evaluate(perm, camps, cap, mill, co, scales):
     """
-    Evaluates a permutation of campaigns and returns 5 objective values.
+    Evaluate a campaign permutation.
 
-    Objectives:
-        0: Section changeover cost (Rs) — fixed cost + opportunity cost of hrs lost
-        1: Thickness changeover cost (Rs)
-        2: Late delivery (MT x days late)
-        3: Inventory storage (MT x days finished before bucket)
-        4: Inventory storage days (sum of days early, unweighted)
+    Parameters
+    ----------
+    scales : np.array of shape (6,)
+        Per-objective scale constants computed at runtime by
+        compute_obj_scales() in runner.py. Derived as raw_max / 10
+        so all normalised objectives land in [0, ~10].
 
-    Returns np.array of 5 floats.
-    Returns a very large penalty array if the permutation is infeasible
-    (forbidden thickness changeover encountered).
+    Returns np.array of 6 scaled objectives:
+        0  Section changeover cost    (Rs)
+        1  Thickness changeover cost  (Rs)
+        2  Late delivery              (MT·days)
+        3  Storage                    (MT·days)
+        4  Storage                    (days)
+        5  Idle hours
     """
     sec_co_cost     = 0.0
     thk_co_cost     = 0.0
     late_mt_days    = 0.0
     storage_mt_days = 0.0
     storage_days    = 0.0
+    idle_hours      = 0.0
 
-    clock    = 0.0   # hours elapsed since day 1 shift start
+    clock    = 0.0
     prev_sec = None
     prev_thk = None
+    n        = len(perm)
 
-    PENALTY = np.array([1e9, 1e9, 1e9, 1e9, 1e9], dtype=float)
-
-    for pos in range(len(perm)):
+    for pos in range(n):
         idx = int(perm[pos])
         c   = camps.iloc[idx]
 
         sec = c['section']
         thk = c['thickness']
         qty = float(c['qty'])
-        due = float(c['due'])       # single due date per campaign
+        due = float(c['due'])
 
         # ── Changeover from previous campaign ────────────
         if prev_sec is not None:
-
             if prev_sec != sec:
-                # Section changeover
                 co_hrs = get_sec_time(co, prev_sec, sec)
                 if co_hrs is None:
-                    return PENALTY   # impossible — penalise
-                new_clock, hrs_lost = compute_changeover_clock(clock, co_hrs)
-                clock        = new_clock
-                sec_co_cost += SEC_COST + (hrs_lost * CONTRIBUTION_PER_HR)
+                    co_hrs = SHIFT_HRS
+                    sec_co_cost += FORBIDDEN_SEC_PENALTY
+
+                remaining = SHIFT_HRS - (clock % SHIFT_HRS)
+                if co_hrs <= remaining:
+                    clock       += co_hrs
+                    sec_co_cost += SEC_COST + (co_hrs * CONTRIBUTION_PER_HR)
+                else:
+                    idle_hours  += remaining
+                    clock        = (np.floor(clock / SHIFT_HRS) + 1) * SHIFT_HRS
+                    sec_co_cost += SEC_COST
 
             elif prev_thk != thk:
                 thk_c = get_thk_cost(co, prev_thk, thk, mill)
                 if thk_c is None:
-                    return PENALTY
+                    thk_c = FORBIDDEN_THK_PENALTY
                 if thk_c > 0:
-                    clock       += THK_CO_HRS   # just burns 0.5 hrs in place, no shift jump
+                    clock       += THK_CO_HRS
                     thk_co_cost += thk_c
 
-        # ── Rolling time for this campaign ────────────────
-        roll_hrs  = (qty / cap) * SHIFT_HRS
-        new_clock, _ = advance_clock(clock, roll_hrs)
-        clock         = new_clock
+        # ── Look ahead to determine next changeover type ──
+        next_is_section_co   = False
+        next_is_thickness_co = False
+        if pos + 1 < n:
+            nxt     = camps.iloc[int(perm[pos + 1])]
+            nxt_sec = nxt['section']
+            nxt_thk = nxt['thickness']
+            if nxt_sec != sec:
+                next_is_section_co = True
+            elif nxt_thk != thk:
+                next_is_thickness_co = True
 
+        # ── Rolling ───────────────────────────────────────
+        roll_hrs  = (qty / cap) * SHIFT_HRS
+        remaining = SHIFT_HRS - (clock % SHIFT_HRS)
+        spill     = roll_hrs - remaining
+
+        # ── Stretch decision ──────────────────────────────
+        apply_stretch = False
+        if 0 < spill <= STRETCH_MAX_HRS:
+            if next_is_section_co:
+                apply_stretch = True
+            elif next_is_thickness_co:
+                est_finish = (clock + roll_hrs) / SHIFT_HRS
+                if est_finish > due:
+                    apply_stretch = True
+
+        if not apply_stretch and spill > 0 and next_is_section_co:
+            idle_hours += remaining
+
+        clock     += roll_hrs
         finish_day = clock / SHIFT_HRS
 
         # ── Late delivery ─────────────────────────────────
@@ -174,7 +187,7 @@ def evaluate(perm, camps, cap, mill, co):
             late_mt_days += qty * (finish_day - due)
 
         # ── Storage (finished early) ──────────────────────
-        if finish_day < due:
+        elif finish_day < due:
             early_days       = due - finish_day
             storage_mt_days += qty * early_days
             storage_days    += early_days
@@ -182,10 +195,13 @@ def evaluate(perm, camps, cap, mill, co):
         prev_sec = sec
         prev_thk = thk
 
-    return np.array([
-    sec_co_cost     / NORM_SEC_CO_COST,
-    thk_co_cost     / NORM_THK_CO_COST,
-    late_mt_days    / NORM_LATE_MT_DAYS,
-    storage_mt_days / NORM_STORAGE_MT_DAYS,
-    storage_days    / NORM_STORAGE_DAYS
-], dtype=float)
+    raw = np.array([
+        sec_co_cost,
+        thk_co_cost,
+        late_mt_days,
+        storage_mt_days,
+        storage_days,
+        idle_hours,
+    ], dtype=float)
+
+    return raw / scales
