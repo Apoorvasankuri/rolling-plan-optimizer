@@ -4,8 +4,8 @@ with open('results.json', 'r') as f:
     results = json.load(f)
 
 # Inject obj_labels so JS can read them
-OBJ_LABELS = ["Sec CO time (hrs)", "Sec CO cost (Rs)", "Thk CO cost (Rs)",
-               "Late (MT\u00b7days)", "Storage (MT\u00b7days)", "Storage (days)"]
+OBJ_LABELS = ["Sec CO cost (Rs)", "Thk CO cost (Rs)", "Late (MT·days)",
+               "Storage (MT·days)", "Storage (days)"]
 results['obj_labels'] = OBJ_LABELS
 
 results_js = json.dumps(results)
