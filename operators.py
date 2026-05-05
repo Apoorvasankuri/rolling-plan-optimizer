@@ -23,12 +23,13 @@ class PermutationSampling(Sampling):
     last_best_perm : array or None — warm start from previous cycle
     """
 
-    def __init__(self, camps=None, co=None,
-                 seed_fraction=0.20, last_best_perm=None,
+    def __init__(self, camps=None, co=None, scales=None,
+                 seed_fraction=0.25, last_best_perm=None,
                  actual_perm=None):
         super().__init__()
         self.camps          = camps
         self.co             = co
+        self.scales         = scales
         self.seed_fraction  = seed_fraction
         self.last_best_perm = last_best_perm
         self.actual_perm    = actual_perm

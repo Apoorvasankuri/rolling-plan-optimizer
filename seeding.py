@@ -180,7 +180,8 @@ def perturb(perm, n_swaps=3):
 # ─────────────────────────────────────────────────────────
 
 def build_seeded_population(n_camps, pop_size, camps, co,
-                            seed_fraction=0.20,
+                            scales=None,
+                            seed_fraction=0.25,
                             last_best_perm=None,
                             actual_perm=None):
     """
