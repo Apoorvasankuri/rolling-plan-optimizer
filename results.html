@@ -273,17 +273,17 @@ function renderPCP(){
   const W = cv.parentElement.offsetWidth || 900, H = 340;
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
+  ctx.clearRect(0, 0, W, H);
 
   const nDims = OBJ_LABELS.length;
-  const ML = 36, MR = 36, MT = 55, MB = 20;
+  const ML = 50, MR = 20, MT = 65, MB = 35;
   const IW = W - ML - MR, IH = H - MT - MB;
 
   const axMin = OBJ_LABELS.map(lbl => Math.min(...solutions.map(s => s.objectives[lbl])));
   const axMax = OBJ_LABELS.map(lbl => Math.max(...solutions.map(s => s.objectives[lbl])));
 
   const activeIdx = spaceMill === 'sm' ? STATE.selectedSM : STATE.selectedLM;
+  const hiIdx = activeIdx !== null ? activeIdx : 0;
 
   function xOf(i){ return ML + i * (IW / (nDims - 1)); }
 
@@ -292,27 +292,35 @@ function renderPCP(){
     return MT + IH - ((val - mn) / r) * IH;
   }
 
-  function fmtAxis(v){
+  function fmt(v){
     if(v >= 1e6) return (v/1e6).toFixed(1)+'M';
+    if(v >= 10000) return (v/1000).toFixed(0)+'k';
     if(v >= 1000) return (v/1000).toFixed(0)+'k';
     return Number.isInteger(v) ? ''+v : v.toFixed(1);
   }
 
+  function distToSegment(px, py, x1, y1, x2, y2){
+    const dx = x2-x1, dy = y2-y1;
+    const lenSq = dx*dx + dy*dy;
+    if(lenSq === 0) return Math.hypot(px-x1, py-y1);
+    const t = Math.max(0, Math.min(1, ((px-x1)*dx + (py-y1)*dy) / lenSq));
+    return Math.hypot(px - (x1+t*dx), py - (y1+t*dy));
+  }
+
   // Background lines
   solutions.forEach((sol, si) => {
-    if(si === activeIdx) return;
+    if(si === hiIdx) return;
     ctx.beginPath();
     OBJ_LABELS.forEach((lbl, j) => {
       const x = xOf(j), y = yOf(j, sol.objectives[lbl]);
       j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
-    ctx.strokeStyle = OBJ_COLORS[si % OBJ_COLORS.length] + '55';
+    ctx.strokeStyle = OBJ_COLORS[si % OBJ_COLORS.length] + '30';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   });
 
   // Highlighted line
-  const hiIdx = activeIdx !== null ? activeIdx : 0;
   const hiSol = solutions[hiIdx];
   if(hiSol){
     ctx.beginPath();
@@ -321,7 +329,7 @@ function renderPCP(){
       j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.strokeStyle = OBJ_COLORS[hiIdx % OBJ_COLORS.length];
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 3;
     ctx.lineJoin = 'round';
     ctx.stroke();
   }
@@ -331,63 +339,53 @@ function renderPCP(){
     const x = xOf(i);
     const color = OBJ_COLORS[i];
 
+    // Axis line
     ctx.beginPath(); ctx.moveTo(x, MT); ctx.lineTo(x, MT + IH);
-    ctx.strokeStyle = '#cccccc'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1.5; ctx.stroke();
 
-    const words = lbl.split(' ');
-    let line1 = '', line2 = '';
-    words.forEach(w => {
-      if(!line1 || (line1+' '+w).length <= 10) line1 += (line1?' ':'')+w;
-      else line2 += (line2?' ':'')+w;
-    });
-    ctx.fillStyle = color;
-    ctx.font = 'bold 9px IBM Plex Mono,monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(line1, x, MT - (line2 ? 26 : 18));
-    if(line2) ctx.fillText(line2, x, MT - 14);
+    // Label (two lines: name + unit)
+    const parts = lbl.match(/^(.*?)\s*(\(.*\))$/);
+    const name = parts ? parts[1] : lbl;
+    const unit = parts ? parts[2] : '';
+    ctx.fillStyle = color; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(name, x, MT - 30);
+    ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif';
+    ctx.fillText(unit, x, MT - 16);
 
-    ctx.fillStyle = '#888888';
-    ctx.font = '8px IBM Plex Mono,monospace';
-    const ta = i === 0 ? 'left' : i === nDims-1 ? 'right' : 'center';
-    ctx.textAlign = ta;
-    const offX = i === 0 ? x+2 : i === nDims-1 ? x-2 : x;
-    ctx.fillText(fmtAxis(axMax[i]), offX, MT + 3);
-    ctx.fillText(fmtAxis(axMin[i]), offX, MT + IH + 9);
+    // Min/max right-aligned to axis
+    ctx.fillStyle = '#bbb'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(fmt(axMin[i]), x - 8, MT + IH + 4);
+    ctx.fillText(fmt(axMax[i]), x - 8, MT + 4);
 
-    if(hiSol){
-      const hy = yOf(i, hiSol.objectives[lbl]);
-      ctx.beginPath(); ctx.arc(x, hy, 5, 0, Math.PI*2);
-      ctx.fillStyle = color; ctx.fill();
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+    // Dot on highlighted
+    const hy = yOf(i, hiSol.objectives[lbl]);
+    ctx.beginPath(); ctx.arc(x, hy, 7, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
 
-      ctx.fillStyle = color;
-      ctx.font = 'bold 9px IBM Plex Mono,monospace';
-      ctx.textAlign = 'center';
-      const lx = i === 0 ? x+14 : i === nDims-1 ? x-14 : x;
-      ctx.fillText(fmtAxis(hiSol.objectives[lbl]), lx, hy - 10);
-    }
+    // Value label
+    ctx.fillStyle = color; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(fmt(hiSol.objectives[lbl]), x, hy - 12);
   });
 
-  // Click to select
+  // Click — nearest line segment or dot
   cv.onclick = e => {
     const rect = cv.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const scaleY = H / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    const my = (e.clientY - rect.top) * (H / rect.height);
     let best = null, bestD = Infinity;
     solutions.forEach((sol, si) => {
-      OBJ_LABELS.forEach((lbl, j) => {
-        const x = xOf(j);
-        const y = yOf(j, sol.objectives[lbl]);
-        const d = Math.hypot(mx - x, my - y);
+      // Check distance to each line segment
+      for(let j = 0; j < nDims - 1; j++){
+        const x1 = xOf(j),   y1 = yOf(j,   sol.objectives[OBJ_LABELS[j]]);
+        const x2 = xOf(j+1), y2 = yOf(j+1, sol.objectives[OBJ_LABELS[j+1]]);
+        const d = distToSegment(mx, my, x1, y1, x2, y2);
         if(d < bestD){ bestD = d; best = si; }
-      });
+      }
     });
-    if(best !== null && bestD < 50) selectSolution(spaceMill, best);
+    if(best !== null && bestD < 12) selectSolution(spaceMill, best);
   };
 }
-
 // ── Solution cards ────────────────────────────────────────
 
 function renderCards(mill){
