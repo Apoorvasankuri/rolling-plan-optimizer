@@ -12,6 +12,44 @@ from operators import PermutationSampling, OrderCrossover, SwapMutation
 from convergence import ConvergenceCallback, MAX_GEN
 from seeding import compute_hv_ref_point
 
+def compute_obj_scales(camps, cap, mill, co, n_samples=1000, seed=0):
+    """
+    Derives per-objective scale constants from actual data.
+    Runs n_samples random permutations, returns raw_max / 10
+    so all normalised objectives land in [0, ~10].
+    """
+    from evaluator import evaluate
+
+    rng         = np.random.default_rng(seed)
+    n           = len(camps)
+    all_F       = []
+    unit_scales = np.ones(6, dtype=float)
+
+    for _ in range(n_samples):
+        perm = rng.permutation(n)
+        F    = evaluate(perm, camps, cap, mill, co, unit_scales)
+        if np.all(np.isfinite(F)) and np.all(F < 1e8):
+            all_F.append(F)
+
+    if len(all_F) == 0:
+        print(f"[{mill}] WARNING: no finite solutions during scale "
+              f"computation — using unit scales")
+        return unit_scales
+
+    all_F   = np.array(all_F)
+    raw_max = all_F.max(axis=0)
+    raw_max = np.where(raw_max < 1e-9, 1.0, raw_max)
+    scales  = raw_max / 10.0
+
+    labels = ["sec_co_cost", "thk_co_cost", "late_mt_days",
+              "storage_mt", "storage_days", "idle_hours"]
+    print(f"\n[{mill}] Objective scales from {len(all_F)} random permutations:")
+    print(f"  {'Objective':<16} {'raw_max':>12}  {'scale':>12}")
+    print(f"  {'-'*44}")
+    for i, lbl in enumerate(labels):
+        print(f"  {lbl:<16} {raw_max[i]:>12.2f}  {scales[i]:>12.2f}")
+
+    return scales
 
 def run_nsga3(camps, cap, mill, co,
               n_gen=MAX_GEN, pop_size=252, seed=42,
@@ -31,15 +69,19 @@ def run_nsga3(camps, cap, mill, co,
     """
     pool    = ThreadPool(8)
     runner  = StarmapParallelization(pool.starmap)
-    problem = RollingPlanProblem(camps, cap, mill, co, elementwise_runner=runner)
+
+    # ── Compute objective scales from data ────────────────
+    scales  = compute_obj_scales(camps, cap, mill, co, n_samples=1000, seed=seed)
+
+    problem = RollingPlanProblem(camps, cap, mill, co, scales, elementwise_runner=runner)
 
     # Two-layer reference directions
     # Layer 1 — dense, more reference points overall
     # Layer 2 — sparse, ensures no region is ignored
     ref_dirs = get_reference_directions(
         "multi-layer",
-        get_reference_directions("das-dennis", 5, n_partitions=6),
-        get_reference_directions("das-dennis", 5, n_partitions=3),
+        get_reference_directions("das-dennis", 6, n_partitions=5),
+        get_reference_directions("das-dennis", 6, n_partitions=1),
     )
 
     # Population must be >= number of reference directions
@@ -57,6 +99,7 @@ def run_nsga3(camps, cap, mill, co,
         cap    = cap,
         mill   = mill,
         co     = co,
+        scales = scales,
         margin = 0.15
     )
 
@@ -68,29 +111,30 @@ def run_nsga3(camps, cap, mill, co,
             cap         = cap,
             mill        = mill,
             co          = co,
+            scales      = scales,
             margin      = 0.15
         )
         ref_point = np.maximum(nn_ref, actual_ref)
         print(f"[{mill}] Final ref point (max of NN and actual plan):")
         labels = ["sec_co_cost", "thk_co_cost",
-                  "late", "storage_mt", "storage_days"]
+                  "late", "storage_mt", "storage_days", "idle_hrs"]
         for l, v in zip(labels, ref_point):
             print(f"       {l:<20}: {v:.4f}")
     else:
         ref_point = nn_ref
 
-    # ── Convergence callback ──────────────────────────────
     callback = ConvergenceCallback(
         ref_point = ref_point,
-        window    = 100,
-        hv_tol    = 0.005
+        window    = 150,
+        hv_tol    = 0.005,
+        scales    = scales
     )
 
-    # ── Seeded sampling ───────────────────────────────────
     sampling = PermutationSampling(
         camps          = camps,
         co             = co,
-        seed_fraction  = 0.20,
+        scales         = scales,
+        seed_fraction  = 0.25,
         last_best_perm = last_best_perm,
         actual_perm    = actual_perm
     )
@@ -120,7 +164,7 @@ def run_nsga3(camps, cap, mill, co,
     # Print convergence summary
     callback.summary()
 
-    return result, callback
+    return result, callback, scales
 
 
 def pick_best_per_objective(F):
