@@ -344,7 +344,7 @@ function renderPCP(){
     ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1.5; ctx.stroke();
 
     // Label (two lines: name + unit)
-    const parts = lbl.match(/^(.*?)\s*(\(.*\))$/);
+    const parts = lbl.match(/^(.*?)[\s]*(\(.*\))$/);
     const name = parts ? parts[1] : lbl;
     const unit = parts ? parts[2] : '';
     ctx.fillStyle = color; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
