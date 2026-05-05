@@ -282,7 +282,7 @@ function renderPCP(){
   const cv = document.getElementById('pcp-canvas');
   if(!cv) return;
 
-  const W = cv.offsetWidth || 900, H = 340;
+  const W = cv.parentElement.offsetWidth || 900, H = 340;
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = '#111318';
