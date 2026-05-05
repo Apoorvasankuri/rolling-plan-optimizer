@@ -240,8 +240,8 @@ function renderSolutionSpace(){
         <button onclick="setSpaceMill('lm')" id="space-btn-lm" class="mill-btn">LM Mill</button>
         <span style="font-size:11px;color:#5a6478;margin-left:8px;">Each bar group = one solution · Click a solution to select it</span>
       </div>
-      <canvas id="space-canvas" height="320" style="display:block;width:100%;cursor:pointer;border-radius:6px;"></canvas>
-      <div id="space-legend" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;"></div>
+      <canvas id="pcp-canvas" height="340" style="display:block;width:100%;cursor:pointer;border-radius:6px;"></canvas>
+      <p style="font-size:10px;color:#5a6478;margin-top:8px;text-align:center;font-family:var(--mono);">Click a line or dot to highlight · lower is better on every axis</p>
     </div>
     <div class="divider"></div>
     <div id="sm-section">
@@ -265,7 +265,7 @@ function renderSolutionSpace(){
   renderCards('sm');
   renderCards('lm');
   spaceMill = 'sm';
-  setTimeout(()=>renderSpaceChart(), 60);
+  setTimeout(()=>renderPCP(), 60);
 }
 
 let spaceMill = 'sm';
@@ -274,98 +274,126 @@ function setSpaceMill(mill){
   spaceMill = mill;
   document.getElementById('space-btn-sm').className = 'mill-btn' + (mill==='sm'?' active-mill':'');
   document.getElementById('space-btn-lm').className = 'mill-btn' + (mill==='lm'?' active-mill':'');
-  renderSpaceChart();
+  renderPCP();
 }
 
-function renderSpaceChart(){
-  const r = STATE.results;
-  const solutions = r[spaceMill].solutions;
-  const cv = document.getElementById('space-canvas');
+function renderPCP(){
+  const solutions = STATE.results[spaceMill].solutions;
+  const cv = document.getElementById('pcp-canvas');
   if(!cv) return;
 
-  const W = cv.offsetWidth || 900, H = 320;
+  const W = cv.offsetWidth || 900, H = 340;
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
-  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#111318';
+  ctx.fillRect(0, 0, W, H);
 
-  const ML=60, MR=20, MT=50, MB=80;
-  const IW = W-ML-MR, IH = H-MT-MB;
-  const nSols = solutions.length;
-  const nObj = OBJ_LABELS.length;
-  const barW = Math.max(4, Math.floor(IW/(nSols*nObj + nSols)));
-  const groupW = barW*nObj + barW;
+  const nDims = OBJ_LABELS.length;
+  const ML = 36, MR = 36, MT = 55, MB = 20;
+  const IW = W - ML - MR, IH = H - MT - MB;
 
-  // Per-objective min for "best" highlight
-  const objMins = OBJ_LABELS.map(lbl => Math.min(...solutions.map(s=>s.objectives[lbl])));
-  const objMaxs = OBJ_LABELS.map(lbl => Math.max(...solutions.map(s=>s.objectives[lbl])));
+  const axMin = OBJ_LABELS.map(lbl => Math.min(...solutions.map(s => s.objectives[lbl])));
+  const axMax = OBJ_LABELS.map(lbl => Math.max(...solutions.map(s => s.objectives[lbl])));
 
-  // Draw axes
-  ctx.strokeStyle = '#252a35'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(ML,MT); ctx.lineTo(ML,MT+IH); ctx.lineTo(ML+IW,MT+IH); ctx.stroke();
+  const activeIdx = spaceMill === 'sm' ? STATE.selectedSM : STATE.selectedLM;
 
-  // Y-axis label
-  ctx.save(); ctx.fillStyle='#5a6478'; ctx.font='10px IBM Plex Mono,monospace';
-  ctx.textAlign='center'; ctx.translate(15,MT+IH/2); ctx.rotate(-Math.PI/2);
-  ctx.fillText('Normalised value (0=best, 1=worst)',0,0); ctx.restore();
+  function xOf(i){ return ML + i * (IW / (nDims - 1)); }
 
-  solutions.forEach((sol, si)=>{
-    const gx = ML + si*groupW + barW*0.5;
-    OBJ_LABELS.forEach((lbl, oi)=>{
-      const val = sol.objectives[lbl];
-      const norm = objMaxs[oi]>objMins[oi] ? (val-objMins[oi])/(objMaxs[oi]-objMins[oi]) : 0;
-      const barH = Math.max(2, norm*IH);
-      const x = gx + oi*barW;
-      const y = MT + IH - barH;
-      const isBest = val === objMins[oi];
-      const isSelected = (spaceMill==='sm' && STATE.selectedSM===si) || (spaceMill==='lm' && STATE.selectedLM===si);
-
-      ctx.fillStyle = OBJ_COLORS[oi] + (isBest?'ff': isSelected?'cc':'55');
-      ctx.fillRect(x+1, y, barW-2, barH);
-
-      if(isBest){
-        ctx.fillStyle = OBJ_COLORS[oi];
-        ctx.font='bold 8px IBM Plex Mono,monospace';
-        ctx.textAlign='center';
-        ctx.fillText('★', x+barW/2, y-3);
-      }
-    });
-
-    // Solution label
-    const isSelected = (spaceMill==='sm' && STATE.selectedSM===si) || (spaceMill==='lm' && STATE.selectedLM===si);
-    const isBalanced = sol.label.includes('TOPSIS') || sol.label.includes('Balanced');
-    ctx.fillStyle = isSelected ? (isBalanced?'#ffd166':'#00d4ff') : '#5a6478';
-    ctx.font = (isSelected?'bold ':'')+'9px IBM Plex Mono,monospace';
-    ctx.textAlign='center';
-    const shortLabel = sol.label.replace('Best ','').replace(' (TOPSIS)','').replace('(MT·days)','MT·d').replace('(days)','days').replace(' (Rs)','');
-    const labelX = gx + (nObj*barW)/2;
-    // Wrap at 12 chars
-    const words = shortLabel.split(' ');
-    let line='', lines=[];
-    words.forEach(w=>{ if((line+w).length>10&&line){lines.push(line.trim());line=w+' ';}else{line+=w+' ';} });
-    if(line.trim()) lines.push(line.trim());
-    lines.forEach((l,li)=>ctx.fillText(l, labelX, MT+IH+16+li*12));
-  });
-
-  // Legend
-  const legend = document.getElementById('space-legend');
-  if(legend){
-    legend.innerHTML = OBJ_LABELS.map((lbl,i)=>
-      `<span style="display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;color:${OBJ_COLORS[i]};">
-        <span style="width:10px;height:10px;border-radius:2px;background:${OBJ_COLORS[i]};display:inline-block;"></span>${lbl}
-      </span>`
-    ).join('');
+  function yOf(dimIdx, val){
+    const mn = axMin[dimIdx], mx = axMax[dimIdx], r = mx - mn || 1;
+    return MT + IH - ((val - mn) / r) * IH;
   }
 
-  // Click handler
-  cv.onclick = e=>{
-    const rect = cv.getBoundingClientRect();
-    const mx = (e.clientX-rect.left)*(W/rect.width);
-    solutions.forEach((sol,si)=>{
-      const gx = ML + si*groupW + barW*0.5;
-      const lx = gx;
-      const rx = gx + nObj*barW;
-      if(mx>=lx && mx<=rx+barW) selectSolution(spaceMill, si);
+  function fmtAxis(v){
+    if(v >= 1e6) return (v/1e6).toFixed(1)+'M';
+    if(v >= 1000) return (v/1000).toFixed(0)+'k';
+    return Number.isInteger(v) ? ''+v : v.toFixed(1);
+  }
+
+  // Background lines
+  solutions.forEach((sol, si) => {
+    if(si === activeIdx) return;
+    ctx.beginPath();
+    OBJ_LABELS.forEach((lbl, j) => {
+      const x = xOf(j), y = yOf(j, sol.objectives[lbl]);
+      j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
+    ctx.strokeStyle = OBJ_COLORS[si % OBJ_COLORS.length] + '28';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  // Highlighted line
+  const hiIdx = activeIdx !== null ? activeIdx : 0;
+  const hiSol = solutions[hiIdx];
+  if(hiSol){
+    ctx.beginPath();
+    OBJ_LABELS.forEach((lbl, j) => {
+      const x = xOf(j), y = yOf(j, hiSol.objectives[lbl]);
+      j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = OBJ_COLORS[hiIdx % OBJ_COLORS.length];
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  // Axes, labels, dots, value labels
+  OBJ_LABELS.forEach((lbl, i) => {
+    const x = xOf(i);
+    const color = OBJ_COLORS[i];
+
+    ctx.beginPath(); ctx.moveTo(x, MT); ctx.lineTo(x, MT + IH);
+    ctx.strokeStyle = '#2e3545'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    const words = lbl.split(' ');
+    let line1 = '', line2 = '';
+    words.forEach(w => {
+      if(!line1 || (line1+' '+w).length <= 10) line1 += (line1?' ':'')+w;
+      else line2 += (line2?' ':'')+w;
+    });
+    ctx.fillStyle = color;
+    ctx.font = 'bold 9px IBM Plex Mono,monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(line1, x, MT - (line2 ? 26 : 18));
+    if(line2) ctx.fillText(line2, x, MT - 14);
+
+    ctx.fillStyle = '#5a6478';
+    ctx.font = '8px IBM Plex Mono,monospace';
+    const ta = i === 0 ? 'left' : i === nDims-1 ? 'right' : 'center';
+    ctx.textAlign = ta;
+    const offX = i === 0 ? x+2 : i === nDims-1 ? x-2 : x;
+    ctx.fillText(fmtAxis(axMax[i]), offX, MT + 3);
+    ctx.fillText(fmtAxis(axMin[i]), offX, MT + IH + 9);
+
+    if(hiSol){
+      const hy = yOf(i, hiSol.objectives[lbl]);
+      ctx.beginPath(); ctx.arc(x, hy, 5, 0, Math.PI*2);
+      ctx.fillStyle = color; ctx.fill();
+      ctx.strokeStyle = '#111318'; ctx.lineWidth = 2; ctx.stroke();
+
+      ctx.fillStyle = color;
+      ctx.font = 'bold 9px IBM Plex Mono,monospace';
+      ctx.textAlign = 'center';
+      const lx = i === 0 ? x+14 : i === nDims-1 ? x-14 : x;
+      ctx.fillText(fmtAxis(hiSol.objectives[lbl]), lx, hy - 10);
+    }
+  });
+
+  // Click to select
+  cv.onclick = e => {
+    const rect = cv.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    const my = (e.clientY - rect.top) * (H / rect.height);
+    let best = null, bestD = Infinity;
+    solutions.forEach((sol, si) => {
+      OBJ_LABELS.forEach((lbl, j) => {
+        const x = xOf(j), y = yOf(j, sol.objectives[lbl]);
+        const d = Math.hypot(mx - x, my - y);
+        if(d < bestD){ bestD = d; best = si; }
+      });
+    });
+    if(best !== null && bestD < 24) selectSolution(spaceMill, best);
   };
 }
 
@@ -404,7 +432,7 @@ function selectSolution(mill, idx){
   if(mill==='sm') STATE.selectedSM=idx; else STATE.selectedLM=idx;
   renderCards('sm');
   renderCards('lm');
-  renderSpaceChart();
+  renderPCP();
   renderPlan();
   document.getElementById('tab2').classList.add('done');
 }

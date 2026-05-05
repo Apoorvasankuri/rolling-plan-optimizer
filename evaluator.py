@@ -8,15 +8,36 @@ STRETCH_MAX   = SHIFT_HRS * 1.3
 SEC_COST      = 24100.0
 THK_CO_HRS    = 0.5
 
-# ── Normalisation denominators ────────────────────────────
-# Set to expected worst-case value for each objective
-# Objectives will be returned in range [0, ~1]
 CONTRIBUTION_PER_HR  = 62_866.0
-NORM_SEC_CO_COST     = 10_000_000.0
-NORM_THK_CO_COST     = 3_000_000.0
-NORM_LATE_MT_DAYS    = 60_000.0
-NORM_STORAGE_MT_DAYS = 5_000.0
-NORM_STORAGE_DAYS    = 250.0
+
+# ── Pre-scaling constants ─────────────────────────────────
+# These are NOT importance weights. Their only job is to ensure
+# all 5 objectives enter NSGA-III at the same order of magnitude.
+#
+# When pymoo's hyperplane solve fails (which it will on this problem
+# because stor_mt and stor_d share an extreme point — r=0.52),
+# it falls back to nadir = worst_of_front. In that fallback,
+# perpendicular distances use nadir magnitudes directly.
+# These scales ensure all nadir values land in [4.5, 9.9]
+# so no objective dominates the distance calculation.
+#
+# Derived from: SCALE_i = observed_raw_max / 10
+# measured over 1000 random permutations on Jan-2026 data,
+# taking max(SM, LM) per objective and rounding up.
+SCALE_SEC_CO_COST     = 1_700_000.0
+SCALE_THK_CO_COST     =    80_500.0
+SCALE_LATE_MT_DAYS    =     4_900.0
+SCALE_STORAGE_MT_DAYS =       490.0
+SCALE_STORAGE_DAYS    =        30.0
+
+# Single source of truth — imported by main.py, seeding.py, convergence.py
+OBJ_SCALES = np.array([
+    SCALE_SEC_CO_COST,
+    SCALE_THK_CO_COST,
+    SCALE_LATE_MT_DAYS,
+    SCALE_STORAGE_MT_DAYS,
+    SCALE_STORAGE_DAYS,
+], dtype=float)
 
 # ── Changeover lookup helpers ─────────────────────────────
 
