@@ -178,31 +178,34 @@ def pick_best_per_objective(F):
 def pick_balanced(F):
     """
     Weighted TOPSIS balanced solution.
-    Weights reflect priority: Late > Sec CO Time > Sec CO Cost > Thk CO Cost > Storage.
 
     Objective indices:
-        0: Sec CO time
-        1: Sec CO cost
-        2: Thk CO cost
-        3: Late (MT·days)      ← highest priority
-        4: Storage (MT·days)
-        5: Storage (days)
+        0: Section changeover cost
+        1: Thickness changeover cost
+        2: Late delivery (MT·days)   ← highest priority
+        3: Storage MT·days
+        4: Storage days
+        5: Idle hours
     """
-    weights = np.array([0.20, 0.15, 0.40, 0.15, 0.10])
-    # weights sum to 1.0 — late delivery gets 40%, sec CO cost 20%
+    weights = np.array([
+        0.15,   # sec co cost
+        0.10,   # thk co cost
+        0.35,   # late delivery  ← dominant
+        0.15,   # storage MT
+        0.10,   # storage days
+        0.15,   # idle hours
+    ])
 
     mins  = F.min(axis=0)
     maxs  = F.max(axis=0)
     denom = np.where(maxs > mins, maxs - mins, 1.0)
-    norm  = (F - mins) / denom          # shape (n_solutions, 5), range [0,1]
+    norm  = (F - mins) / denom
 
-    weighted = norm * weights           # scale each objective by its priority
-
-    ideal = np.zeros(F.shape[1])        # best possible = 0 in every objective
-    nadir = weights                     # worst in weighted space = weights vector
-
+    weighted      = norm * weights
+    ideal         = np.zeros(F.shape[1])
+    nadir         = weights
     dist_to_ideal = np.linalg.norm(weighted - ideal, axis=1)
     dist_to_nadir = np.linalg.norm(weighted - nadir, axis=1)
-
     topsis_score  = dist_to_nadir / (dist_to_ideal + dist_to_nadir + 1e-9)
+
     return int(np.argmax(topsis_score))

@@ -284,7 +284,7 @@ def build_seeded_population(n_camps, pop_size, camps, co,
 
     return pop_array
 
-def compute_hv_ref_point(camps, cap, mill, co, margin=0.15):
+def compute_hv_ref_point(camps, cap, mill, co, scales, margin=0.15):
     """
     Runs nearest-neighbour from every possible starting campaign.
     Evaluates each sequence.
@@ -349,33 +349,34 @@ def compute_hv_ref_point(camps, cap, mill, co, margin=0.15):
 
         # Evaluate this sequence
         perm = np.array(sequence, dtype=int)
-        F    = evaluate(perm, camps, cap, mill, co)
+        F    = evaluate(perm, camps, cap, mill, co, scales)
         if np.all(F < 1e8):
             all_F.append(F)
 
     # ── Random sequences — capture objectives NN ignores ──
     rng = np.random.default_rng(seed=0)
-    for _ in range(50):
+    for _ in range(100):
         perm = rng.permutation(n)
-        F    = evaluate(perm, camps, cap, mill, co)
+        F    = evaluate(perm, camps, cap, mill, co, scales)
         if np.all(F < 1e8):
             all_F.append(F)
 
     if len(all_F) == 0:
         print(f"[{mill}] WARNING: all sequences infeasible, "
-              f"using fallback ref point [2.0 x 5]")
-        return np.ones(5) * 2.0
+              f"using fallback ref point [2.0 x 6]")
+        return np.ones(6) * 2.0
 
     all_F     = np.array(all_F)
     worst     = all_F.max(axis=0)
     ref_point = worst * (1.0 + margin)
 
     print(f"[{mill}] Reference point from "
-          f"{len(all_F)} sequences ({n} NN + 50 random):")
+          f"{len(all_F)} sequences ({n} NN + 100 random):")
     labels = [
         "Sec CO cost (norm)",
         "Thk CO cost (norm)", "Late (norm)",
-        "Storage MT (norm)",  "Storage days (norm)"
+        "Storage MT (norm)",  "Storage days (norm)",
+        "Idle hours (norm)"
     ]
     for i, (label, val) in enumerate(zip(labels, ref_point)):
         print(f"       {label:<22}: {val:.4f}")
