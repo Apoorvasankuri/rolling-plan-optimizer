@@ -383,17 +383,20 @@ function renderPCP(){
   // Click to select
   cv.onclick = e => {
     const rect = cv.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (W / rect.width);
-    const my = (e.clientY - rect.top) * (H / rect.height);
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
     let best = null, bestD = Infinity;
     solutions.forEach((sol, si) => {
       OBJ_LABELS.forEach((lbl, j) => {
-        const x = xOf(j), y = yOf(j, sol.objectives[lbl]);
+        const x = xOf(j);
+        const y = yOf(j, sol.objectives[lbl]);
         const d = Math.hypot(mx - x, my - y);
         if(d < bestD){ bestD = d; best = si; }
       });
     });
-    if(best !== null && bestD < 24) selectSolution(spaceMill, best);
+    if(best !== null && bestD < 50) selectSolution(spaceMill, best);
   };
 }
 
