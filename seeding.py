@@ -384,7 +384,7 @@ def compute_hv_ref_point(camps, cap, mill, co, scales, margin=0.15):
     return ref_point
 
 def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
-                                      margin=0.15):
+                                      scales, margin=0.15):
     """
     Evaluates the actual historical rolling plan permutation.
     Uses its objective values as the HV reference point.
@@ -399,20 +399,16 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
                            CONTRIBUTION_PER_HR,
                            get_sec_time, get_thk_cost,
                            compute_changeover_clock, advance_clock,
-                           NORM_SEC_CO_COST, NORM_THK_CO_COST,
-                           NORM_LATE_MT_DAYS, NORM_STORAGE_MT_DAYS,
-                           NORM_STORAGE_DAYS)
+                           STRETCH_MAX_HRS)
 
-    denoms = np.array([
-        NORM_SEC_CO_COST, NORM_THK_CO_COST,
-        NORM_LATE_MT_DAYS, NORM_STORAGE_MT_DAYS, NORM_STORAGE_DAYS
-    ])
+    denoms = scales
 
     sec_co_cost = thk_co_cost = 0.0
-    late_mt_days = storage_mt_days = storage_days = 0.0
+    late_mt_days = storage_mt_days = storage_days = idle_hours = 0.0
     clock = 0.0
     prev_sec = prev_thk = None
     n_forbidden = 0
+    n = len(actual_perm)
 
     for pos in range(len(actual_perm)):
         idx = int(actual_perm[pos])
@@ -426,23 +422,36 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
                 if co_hrs is None:
                     co_hrs = SHIFT_HRS
                     n_forbidden += 1
-                new_clock, hrs_lost = compute_changeover_clock(clock, co_hrs)
-                clock        = new_clock
-                sec_co_cost += SEC_COST + (hrs_lost * CONTRIBUTION_PER_HR)
+                remaining = SHIFT_HRS - (clock % SHIFT_HRS)
+                if co_hrs <= remaining:
+                    clock       += co_hrs
+                    sec_co_cost += SEC_COST + (co_hrs * CONTRIBUTION_PER_HR)
+                else:
+                    idle_hours  += remaining
+                    clock        = (np.floor(clock / SHIFT_HRS) + 1) * SHIFT_HRS
+                    sec_co_cost += SEC_COST
             elif prev_thk != thk:
                 thk_c = get_thk_cost(co, prev_thk, thk, mill)
                 if thk_c is None:
-                    thk_c = float(denoms[2]) * 0.8
+                    thk_c = float(scales[1]) * 0.8
                     n_forbidden += 1
                 if thk_c > 0:
-                    new_clock, _ = compute_changeover_clock(clock, THK_CO_HRS)
-                    clock        = new_clock
+                    clock       += THK_CO_HRS
                     thk_co_cost += thk_c
 
-        roll_hrs          = (qty / cap) * SHIFT_HRS
-        new_clock, _      = advance_clock(clock, roll_hrs)
-        clock             = new_clock
-        finish_day        = clock / SHIFT_HRS
+        # No stretch applied — actual plan didn't use our stretch rules
+        roll_hrs   = (qty / cap) * SHIFT_HRS
+        remaining  = SHIFT_HRS - (clock % SHIFT_HRS)
+        spill      = roll_hrs - remaining
+
+        # Track idle hours from stranding (section co follows)
+        if spill > 0 and pos + 1 < n:
+            nxt = camps.iloc[int(actual_perm[pos + 1])]
+            if nxt['section'] != sec:
+                idle_hours += remaining
+
+        clock     += roll_hrs
+        finish_day = clock / SHIFT_HRS
 
         if finish_day > due:
             late_mt_days    += qty * (finish_day - due)
@@ -454,14 +463,15 @@ def compute_hv_ref_point_from_actual(actual_perm, camps, cap, mill, co,
         prev_sec = sec; prev_thk = thk
 
     raw = np.array([sec_co_cost, thk_co_cost,
-                    late_mt_days, storage_mt_days, storage_days])
+                    late_mt_days, storage_mt_days, storage_days, idle_hours])
     actual_F  = raw / denoms
     ref_point = actual_F * (1.0 + margin)
 
     labels = [
         "Sec CO cost (norm)",
         "Thk CO cost (norm)", "Late (norm)",
-        "Storage MT (norm)",  "Storage days (norm)"
+        "Storage MT (norm)",  "Storage days (norm)",
+        "Idle hours (norm)"
     ]
     note = f" ({n_forbidden} forbidden transitions treated as high-cost)" \
            if n_forbidden else ""
