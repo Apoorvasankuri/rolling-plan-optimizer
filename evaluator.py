@@ -11,6 +11,8 @@ THK_CO_HRS    = 0.5
 CONTRIBUTION_PER_HR  = 62_866.0
 
 STRETCH_MAX_HRS = 6.0
+FORBIDDEN_SEC_PENALTY = 1_000_000.0
+FORBIDDEN_THK_PENALTY = 1_000_000.0
 
 # OBJ_SCALES is computed at runtime by compute_obj_scales() in runner.py
 # and passed into evaluate() as a parameter.
