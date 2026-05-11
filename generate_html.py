@@ -277,8 +277,28 @@ function setSpaceMill(mill){
   renderPCP();
 }
 
+function getPCPSolutions(mill){
+  const all = STATE.results[mill].solutions;
+  const seen = new Set();
+  const out = [];
+  OBJ_LABELS.forEach(lbl => {
+    const ranked = all
+      .map((s, i) => ({i, v: s.objectives[lbl]}))
+      .sort((a, b) => a.v - b.v);
+    ranked.slice(0, 5).forEach(({i}) => {
+      if(!seen.has(i)){ seen.add(i); out.push({sol: all[i], origIdx: i, pcpLabel: all[i].label}); }
+    });
+  });
+  const topsisIdx = all.findIndex(s => s.label.toLowerCase().includes('topsis') || s.label.toLowerCase().includes('balanced'));
+  if(topsisIdx !== -1 && !seen.has(topsisIdx)){
+    out.push({sol: all[topsisIdx], origIdx: topsisIdx, pcpLabel: all[topsisIdx].label});
+  }
+  return out;
+}
+
 function renderPCP(){
-  const solutions = STATE.results[spaceMill].solutions;
+  const pcpSols = getPCPSolutions(spaceMill);
+  const solutions = pcpSols.map(p => p.sol);
   const cv = document.getElementById('pcp-canvas');
   if(!cv) return;
 
@@ -295,7 +315,8 @@ function renderPCP(){
   const axMax = OBJ_LABELS.map(lbl => Math.max(...solutions.map(s => s.objectives[lbl])));
 
   const activeIdx = spaceMill === 'sm' ? STATE.selectedSM : STATE.selectedLM;
-  const hiIdx = activeIdx !== null ? activeIdx : 0;
+  const hiSlot = activeIdx !== null ? pcpSols.findIndex(p => p.origIdx === activeIdx) : 0;
+  const hiIdx = hiSlot !== -1 ? hiSlot : 0;
 
   function xOf(i){ return ML + i * (IW / (nDims - 1)); }
 
@@ -395,7 +416,7 @@ function renderPCP(){
         if(d < bestD){ bestD = d; best = si; }
       }
     });
-    if(best !== null && bestD < 12) selectSolution(spaceMill, best);
+    if(best !== null && bestD < 12) selectSolution(spaceMill, pcpSols[best].origIdx);
   };
 }
 // ── Solution cards ────────────────────────────────────────

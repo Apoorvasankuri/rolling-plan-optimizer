@@ -18,6 +18,39 @@ STRETCH_MAX_HRS = 6.0
 OBJ_SCALES_FALLBACK = np.ones(6, dtype=float)
 
 # ── Changeover lookup helpers ─────────────────────────────
+def load_co_from_json(json_path: str, mill: str):
+    """
+    Load changeover_data.json and return a co dict compatible with
+    get_sec_time() and get_thk_cost().
+    """
+    import json
+    with open(json_path, 'r') as f:
+        raw = json.load(f)
+
+    # sec_time: flat list → DataFrame (from=rows, to=cols)
+    sec_time_rows = {}
+    for e in raw['sec_co_time']:
+        sec_time_rows.setdefault(e['from'], {})[e['to']] = e['hours']
+    sec_time_df = pd.DataFrame(sec_time_rows).T  # rows=from, cols=to
+
+    # sec_cost: flat list → DataFrame
+    sec_cost_rows = {}
+    for e in raw['sec_co_cost']:
+        sec_cost_rows.setdefault(e['from'], {})[e['to']] = e['cost']
+    sec_cost_df = pd.DataFrame(sec_cost_rows).T
+
+    # thk_cost: flat list → DataFrame, mill-specific
+    thk_key = f'thk_co_cost_{mill.upper()}'
+    thk_cost_rows = {}
+    for e in raw[thk_key]:
+        thk_cost_rows.setdefault(e['from'], {})[e['to']] = e['cost']
+    thk_cost_df = pd.DataFrame(thk_cost_rows).T
+
+    return {
+        'sec_time':           sec_time_df,
+        f'thk_cost_{mill}':   thk_cost_df,
+        'sec_cost':           sec_cost_df,
+    }
 
 def get_sec_time(co, s1, s2):
     """Hours lost during shift for section changeover s1 → s2."""
@@ -26,7 +59,16 @@ def get_sec_time(co, s1, s2):
     try:
         val = co['sec_time'].loc[s1, s2]
         if pd.isna(val):
-            return None   # impossible changeover
+            pass
+        else:
+            return float(val)
+    except KeyError:
+        pass
+    # Try reverse direction (symmetric matrix)
+    try:
+        val = co['sec_time'].loc[s2, s1]
+        if pd.isna(val):
+            return None
         return float(val)
     except KeyError:
         return None
@@ -42,8 +84,15 @@ def get_thk_cost(co, t1, t2, mill):
     key = f'thk_cost_{mill}'
     try:
         val = co[key].loc[t1, t2]
+        if not np.isnan(val):
+            return float(val)
+    except KeyError:
+        pass
+    # Try reverse direction (symmetric matrix)
+    try:
+        val = co[key].loc[t2, t1]
         if np.isnan(val):
-            return None   # forbidden combination
+            return None
         return float(val)
     except KeyError:
         return None
