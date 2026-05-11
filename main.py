@@ -66,7 +66,7 @@ def run_mill(mill, camps, cap, co, n_gen, pop_size, seed,
 
     try:
         t0 = time.time()
-        result, callback = run_nsga3(
+        result, callback, scales = run_nsga3(
             camps          = camps,
             cap            = cap,
             mill           = mill,
