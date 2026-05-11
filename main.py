@@ -35,15 +35,16 @@ OBJ_LABELS = [
     "Late (MT·days)",
     "Storage (MT·days)",
     "Storage (days)",
+    "Idle hours",
 ]
 
-# ── Normalisation denominators (must match evaluator.py) ──
 OBJ_DENOMS = [
     10_000_000.0,
     3_000_000.0,
     60_000.0,
     5_000.0,
     250.0,
+    100.0,
 ]
 
 
