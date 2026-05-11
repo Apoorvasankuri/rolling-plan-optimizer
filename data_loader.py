@@ -128,6 +128,40 @@ def build_campaigns(loi_df, mill):
     return camps
 
 def load_changeover(path):
+    # ── JSON format (changeover_data.json) ───────────────
+    if str(path).endswith('.json'):
+        import json
+        with open(path, 'r') as f:
+            raw = json.load(f)
+
+        # sec_time
+        sec_time_rows = {}
+        for e in raw['sec_co_time']:
+            sec_time_rows.setdefault(e['from'], {})[e['to']] = e['hours']
+        sec_time_df = pd.DataFrame(sec_time_rows).T
+
+        # sec_cost (per-pair)
+        sec_cost_rows = {}
+        for e in raw['sec_co_cost']:
+            sec_cost_rows.setdefault(e['from'], {})[e['to']] = e['cost']
+        sec_cost_df = pd.DataFrame(sec_cost_rows).T
+
+        co = {
+            'sec_time': sec_time_df,
+            'sec_cost': sec_cost_df,
+        }
+
+        for mill_tag in ['SM', 'LM']:
+            thk_key = f'thk_co_cost_{mill_tag}'
+            thk_rows = {}
+            for e in raw[thk_key]:
+                thk_rows.setdefault(e['from'], {})[e['to']] = e['cost']
+            thk_df = pd.DataFrame(thk_rows).T
+            co[f'thk_cost_{mill_tag}'] = thk_df
+
+        return co
+
+    # ── Excel format (original) ───────────────────────────
     xl = pd.ExcelFile(path)
     co = {}
 

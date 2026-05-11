@@ -316,7 +316,7 @@ def main():
     parser.add_argument('--loi',      required=True,
                         help='Path to LOI Excel file')
     parser.add_argument('--co',       required=True,
-                        help='Path to changeover Excel file')
+                        help='Path to changeover Excel or JSON file')
     parser.add_argument('--sm-cap',   type=float, default=100.0,
                         help='SM mill capacity MT/shift (default 100)')
     parser.add_argument('--lm-cap',   type=float, default=150.0,
