@@ -68,7 +68,7 @@ def run_nsga3(camps, cap, mill, co,
     # ── Compute objective scales from data ────────────────
     scales  = compute_obj_scales(camps, cap, mill, co, n_samples=1000, seed=seed)
 
-    problem = RollingPlanProblem(camps, cap, mill, co, scales, elementwise_runner=runner)
+    problem = RollingPlanProblem(camps, cap, mill, co, scales)
 
     # Two-layer reference directions
     # Layer 1 — dense, more reference points overall

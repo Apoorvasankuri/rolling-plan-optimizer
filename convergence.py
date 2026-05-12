@@ -144,8 +144,8 @@ class ConvergenceCallback(Callback):
         recent_gd = self.gen_dist[-self.window:]
         cond_gd   = float(np.mean(recent_gd)) < GD_TOL
 
-        # ── All three must be true ────────────────────────
-        converged = cond_hv and cond_obj and cond_gd
+        # ── Both must be true (GD removed — inappropriate for multi-objective) ──
+        converged = cond_hv and cond_obj
 
         if gen % 50 == 0:
             print(f"         Convergence check → "
