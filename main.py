@@ -418,11 +418,12 @@ def main():
                 save_warm_perm(results[mill], mill, pick_balanced)
 
     save_results_json(
-        mills      = ['SM', 'LM'],
-        results    = results,
-        callbacks  = callbacks,
-        camps_dict = {'SM': camps_sm, 'LM': camps_lm},
-        co         = co
+        mills       = ['SM', 'LM'],
+        results     = results,
+        callbacks   = callbacks,
+        camps_dict  = {'SM': camps_sm, 'LM': camps_lm},
+        co          = co,
+        scales_dict = scales_dict
     )
 
     print(f"\nTotal wall time: {time.time() - t_total:.1f}s")
