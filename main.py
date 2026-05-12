@@ -214,7 +214,7 @@ def build_schedule(perm, camps, mill, co):
 
 # ── Warm start save/load ──────────────────────────────────
 
-def save_results_json(mills, results, callbacks, camps_dict, co):
+def save_results_json(mills, results, callbacks, camps_dict, co, scales_dict):
     import json
 
     output = {}
@@ -240,7 +240,7 @@ def save_results_json(mills, results, callbacks, camps_dict, co):
             perm       = X[sol_i]
             schedule   = build_schedule(perm, camps, mill, co)
             objectives = {
-                label: round(F[sol_i, j] * OBJ_DENOMS[j], 2)
+                label: round(F[sol_i, j] * scales_dict[mill][j], 2)
                 for j, label in enumerate(OBJ_LABELS)
             }
             solutions.append({
@@ -255,7 +255,7 @@ def save_results_json(mills, results, callbacks, camps_dict, co):
         perm       = X[bal_i]
         schedule   = build_schedule(perm, camps, mill, co)
         objectives = {
-            label: round(F[bal_i, j] * OBJ_DENOMS[j], 2)
+            label: round(F[bal_i, j] * scales_dict[mill][j], 2)
             for j, label in enumerate(OBJ_LABELS)
         }
         solutions.append({
