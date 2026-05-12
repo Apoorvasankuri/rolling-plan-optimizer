@@ -395,14 +395,16 @@ def main():
 
     results = {}
     callbacks = {}
+    scales_dict = {}
 
     for mill, camps, cap, warm, actual in mill_configs:
         mill, result, callback = run_mill(
             mill, camps, cap, co,
             args.n_gen, args.pop, args.seed, warm, actual
         )
-        results[mill]   = result
-        callbacks[mill] = callback
+        results[mill]    = result
+        callbacks[mill]  = callback
+        scales_dict[mill] = callback.scales if callback else None
 
     # ── Print results ─────────────────────────────────────
     for mill in ['SM', 'LM']:
