@@ -90,7 +90,7 @@ def run_mill(mill, camps, cap, co, n_gen, pop_size, seed,
 
 # ── Result printer ────────────────────────────────────────
 
-def print_results(mill, result, callback):
+def print_results(mill, result, callback, scales):
     if result is None or result.F is None or len(result.F) == 0:
         print(f"\n[{mill}] No feasible solutions found.")
         return
@@ -110,7 +110,7 @@ def print_results(mill, result, callback):
 
     best_indices = pick_best_per_objective(F)
     for obj_i, sol_i in enumerate(best_indices):
-        raw_val = F[sol_i, obj_i] * OBJ_DENOMS[obj_i]
+        raw_val = F[sol_i, obj_i] * scales[obj_i]
         print(f"  {OBJ_LABELS[obj_i]:<24} {raw_val:>15.1f}  #{sol_i}")
 
     # ── Balanced solution ─────────────────────────────────
@@ -119,7 +119,7 @@ def print_results(mill, result, callback):
     print(f"  {'Objective':<24} {'Value':>15}")
     print(f"  {'-'*40}")
     for obj_i in range(F.shape[1]):
-        raw_val = F[bal_i, obj_i] * OBJ_DENOMS[obj_i]
+        raw_val = F[bal_i, obj_i] * scales[obj_i]
         print(f"  {OBJ_LABELS[obj_i]:<24} {raw_val:>15.1f}")
 
     # ── Balanced sequence ─────────────────────────────────
@@ -408,7 +408,7 @@ def main():
 
     # ── Print results ─────────────────────────────────────
     for mill in ['SM', 'LM']:
-        print_results(mill, results[mill], callbacks[mill])
+        print_results(mill, results[mill], callbacks[mill], scales_dict[mill])
 
     # ── Save warm starts for next cycle ───────────────────
     if args.save:
