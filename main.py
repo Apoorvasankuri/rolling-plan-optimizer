@@ -22,7 +22,6 @@ import sys
 import os
 import time
 import numpy as np
-import concurrent.futures
 
 from data_loader import (load_loi, load_changeover, build_campaigns,
                          load_actual_plan, build_actual_permutation)
@@ -397,20 +396,13 @@ def main():
     results = {}
     callbacks = {}
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        futures = {
-            executor.submit(
-                run_mill,
-                mill, camps, cap, co,
-                args.n_gen, args.pop, args.seed, warm, actual
-            ): mill
-            for mill, camps, cap, warm, actual in mill_configs
-        }
-
-        for future in concurrent.futures.as_completed(futures):
-            mill, result, callback = future.result()
-            results[mill]   = result
-            callbacks[mill] = callback
+    for mill, camps, cap, warm, actual in mill_configs:
+        mill, result, callback = run_mill(
+            mill, camps, cap, co,
+            args.n_gen, args.pop, args.seed, warm, actual
+        )
+        results[mill]   = result
+        callbacks[mill] = callback
 
     # ── Print results ─────────────────────────────────────
     for mill in ['SM', 'LM']:

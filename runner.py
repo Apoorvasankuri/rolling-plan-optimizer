@@ -4,7 +4,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 
-from multiprocessing.pool import ThreadPool
+from multiprocessing import Pool
 from pymoo.parallelization.starmap import StarmapParallelization
 
 from problem import RollingPlanProblem
@@ -67,7 +67,7 @@ def run_nsga3(camps, cap, mill, co,
     last_best_perm : array or None — best perm from previous cycle
                                      (enables warm start seeding)
     """
-    pool    = ThreadPool(8)
+    pool    = Pool(10)
     runner  = StarmapParallelization(pool.starmap)
 
     # ── Compute objective scales from data ────────────────
@@ -151,6 +151,23 @@ def run_nsga3(camps, cap, mill, co,
     # Safety stop at MAX_GEN — callback stops earlier if converged
     termination = get_termination("n_gen", n_gen)
 
+    # Timing diagnostic
+    import time as _time
+    _t0 = _time.time()
+    from evaluator import evaluate as _eval
+    _test_perm = np.random.default_rng(0).permutation(len(camps))
+    _unit = np.ones(6)
+    for _ in range(100):
+        _eval(_test_perm, camps, cap, mill, co, _unit)
+    _elapsed = _time.time() - _t0
+    print(f"[{mill}] 100 evaluate() calls took {_elapsed:.3f}s "
+          f"({_elapsed/100*1000:.2f}ms per call)")
+    pool.close()
+    pool.join()
+    pool = Pool(10)
+    runner = StarmapParallelization(pool.starmap)
+    problem = RollingPlanProblem(camps, cap, mill, co, scales, elementwise_runner=runner)
+    
     result = minimize(
         problem,
         algorithm,
