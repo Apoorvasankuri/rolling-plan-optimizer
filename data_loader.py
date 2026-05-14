@@ -155,7 +155,7 @@ def load_changeover(path):
             thk_key = f'thk_co_cost_{mill_tag}'
             thk_rows = {}
             for e in raw[thk_key]:
-                thk_rows.setdefault(e['from'], {})[e['to']] = e['cost']
+                thk_rows.setdefault(int(e['from']), {})[int(e['to'])] = e['cost']
             thk_df = pd.DataFrame(thk_rows).T
             co[f'thk_cost_{mill_tag}'] = thk_df
 
